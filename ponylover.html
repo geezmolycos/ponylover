@@ -1,0 +1,315 @@
+<html>
+    <head>
+        <title>爱我的六色马可以做什么事</title>
+        <meta charset="UTF-8">
+	    <script
+            src="https://code.jquery.com/jquery-3.6.0.min.js"
+            integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+            crossorigin="anonymous"></script>
+        <style>
+            :root {
+                --game-grid-size: 34px;
+                --game-grid-border: 2px;
+            }
+
+            .layer-cont{
+                position: relative;
+            }
+            .sublayer-cont{
+                position: absolute;
+                left: 0px;
+                top: 0px;
+            }
+            .cell-wrapper{
+                display: inline-block;
+                width: var(--game-grid-size);
+                height: var(--game-grid-size);
+                box-sizing: border-box;
+                padding-top: var(--game-grid-border);
+                padding-left: var(--game-grid-border);
+            }
+            .grid-cont{
+                border-bottom: var(--game-grid-border) solid black;
+                border-right: var(--game-grid-border) solid black;
+            }
+            .grid-cont .cell-wrapper{
+                border-top: var(--game-grid-border) solid black;
+                border-left: var(--game-grid-border) solid black;
+                padding-top: 0px;
+                padding-left: 0px;
+            }
+        </style>
+    </head>
+    <body>
+        <button id="advance">advance</button>
+        <script>
+            'use strict'
+
+            const cardinal = [[0, -1], [-1, 0], [1, 0], [0, 1]];
+
+            class EmptyEnt{
+                can_place_item_on(inst){return true;}
+                tick(inst){}
+                draw(inst){}
+                info(inst){}
+            }
+
+            class BeltEnt{
+                can_place_item_on(inst){return true;}
+                tick(inst){
+                    console.log(inst.x, inst.y);
+                    if (inst.layer.item_sublayer.type[inst.layer.xy2i(inst.x, inst.y)] === item_table.get('empty')
+                        || inst.layer.belt_item_fixed[inst.layer.xy2i(inst.x, inst.y)] ){
+                        return;
+                    }
+                    let [dx, dy] = cardinal[inst.state.dir];
+                    let tx = inst.x + dx;
+                    let ty = inst.y + dy;
+                    if (inst.layer.item_sublayer.type[inst.layer.xy2i(tx, ty)] !== item_table.get('empty')
+                        || !inst.layer.can_place_item_on(tx, ty)){
+                        return;
+                    }
+                    let [old_type, old_state] = inst.layer.item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                    inst.layer.item_sublayer.swap(tx, ty, old_type, old_state);
+                    inst.layer.belt_item_fixed[inst.layer.xy2i(tx, ty)] = true;
+                    for (let back_dir of cardinal){
+                        let [bx, by] = back_dir;
+                        if (bx === dx && by === dy){
+                            continue;
+                        }
+                        if (inst.layer.entity_sublayer.type[inst.layer.xy2i(inst.x + bx, inst.y + by)] instanceof BeltEnt){
+                            console.log('backtrack');
+                            inst.layer.tick_at(inst.x + bx, inst.y + by);
+                        }
+                    }
+                }
+                draw(inst){
+                    return $('<div>').text(`b${inst.state.dir}`).css('position', 'absolute');
+                }
+                info(inst){}
+            }
+
+            class EmptyItem{
+                draw(inst){}
+                info(inst){}
+            }
+
+            class IconItem{
+                constructor(icon){
+                    this.icon = icon;
+                }
+                draw(inst){
+                    return $('<div>').css('background-image', `url('${this.icon}')`).css('background-size', '100% 100%').css('width', '100%').css('height', '100%');
+                }
+                info(inst){}
+            }
+
+            const entity_table = new Map([
+                ['empty', new EmptyEnt()],
+                ['belt', new BeltEnt()],
+            ]);
+
+            const item_table = new Map([
+                ['empty', new EmptyItem()],
+                ['test', new IconItem("./test.png")],
+            ]);
+
+            class YardSubLayer{
+                constructor(layer, init_val){
+                    this.layer = layer;
+                    this.type = new Array(this.layer.width * this.layer.height).fill(init_val);
+                    this.state = new Map();
+                }
+
+                swap(x, y, new_type, new_state){
+                    const i = this.layer.xy2i(x, y);
+                    const old_type = this.type[i];
+                    const old_state = this.state.get(i) || null;
+                    this.state.delete(i);
+                    this.type[i] = new_type;
+                    if (new_state !== null){
+                        this.state.set(i, new_state);
+                    }
+                    return [old_type, old_state];
+                }
+
+                make_cont(){
+                    let $sublayer_cont = $('<div>').addClass('sublayer-cont');
+                    for (let y=0; y<this.layer.height; y++){
+                        for (let x=0; x<this.layer.width; x++){
+                            const wrapper = $('<div>').addClass('cell-wrapper').data('x', x).data('y', y);
+                            $sublayer_cont.append(wrapper);
+                        }
+                        $sublayer_cont.append($('<br>'));
+                    }
+                    return $sublayer_cont;
+                }
+
+                get_inst(x, y){
+                    let state = this.state.get(this.layer.xy2i(x, y)) || null;
+                    let type = this.type[this.layer.xy2i(x, y)];
+                    return {
+                        layer: this.layer,
+                        x: x,
+                        y: y,
+                        type: type,
+                        state: state,
+                    }
+                }
+
+                draw_all($sublayer_cont){
+                    let that = this;
+                    $sublayer_cont.children('.cell-wrapper').each((_, wrapper)=>{
+                        let $wrapper = $(wrapper);
+                        const x = $wrapper.data('x');
+                        const y = $wrapper.data('y');
+                        $wrapper.empty();
+                        let inst = that.get_inst(x, y);
+                        let c = inst.type.draw(inst);
+                        $wrapper.append(c);
+                    });
+                }
+            }
+
+            class YardLayer{
+                constructor(width, height){
+                    this.width = width;
+                    this.height = height;
+                    this.entity_sublayer = new YardSubLayer(this, entity_table.get('empty'));
+                    this.item_sublayer = new YardSubLayer(this, item_table.get('empty'));
+                    this.belt_item_fixed = new Array(this.width * this.height).fill(false);
+                }
+
+                can_place_item_on(x, y){
+                    if (!this.is_in_border(x, y)){
+                        return false;
+                    }
+                    let inst = this.entity_sublayer.get_inst(x, y);
+                    return inst.type.can_place_item_on(inst);
+                }
+
+                xy2i(x, y){
+                    return this.width * y + x;
+                }
+
+                i2xy(i){
+                    return [i % this.width, Math.floor(i / this.width)];
+                }
+
+                is_in_border(x, y){
+                    return 0 <= x && x < this.width && 0 <= y && y < this.height;
+                }
+
+                tick_all(){
+                    for (let y=0; y<this.height; y++){
+                        for (let x=0; x<this.width; x++){
+                            this.tick_at(x, y);
+                        }
+                    }
+                    this.belt_item_fixed.fill(false);
+                }
+
+                tick_at(x, y){
+                    let inst = this.entity_sublayer.get_inst(x, y);
+                    inst.type.tick(inst);
+                }
+
+                make_cont(){
+                    let $cont = $('<div>').addClass('layer-cont');
+                    let $grid_cont = this.entity_sublayer.make_cont().addClass('grid-cont');
+                    let $entity_cont = this.entity_sublayer.make_cont().addClass('entity-sublayer-cont');
+                    let $item_cont = this.item_sublayer.make_cont().addClass('item-sublayer-cont');
+                    $cont.append($grid_cont).append($entity_cont).append($item_cont);
+                    return $cont;
+                }
+
+                draw_all($layer_cont){
+                    let $entity_cont = $layer_cont.children('.entity-sublayer-cont');
+                    let $item_cont = $layer_cont.children('.item-sublayer-cont');
+                    this.entity_sublayer.draw_all($entity_cont);
+                    this.item_sublayer.draw_all($item_cont);
+                }
+            }
+        
+        let yl = new YardLayer(5, 5);
+        
+        let $layer_cont = yl.make_cont();
+        $('body').append($layer_cont);
+        yl.item_sublayer.swap(1, 0, item_table.get('test'), null);
+        yl.item_sublayer.swap(1, 1, item_table.get('test'), null);
+        yl.item_sublayer.swap(1, 3, item_table.get('test'), null);
+        yl.item_sublayer.swap(1, 4, item_table.get('test'), null);
+        yl.entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
+        yl.entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
+        yl.entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
+        yl.entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
+        yl.entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
+        yl.entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
+        yl.entity_sublayer.swap(3, 2, entity_table.get('belt'), {dir: 2});
+        yl.entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
+        yl.draw_all($layer_cont);
+        $('#advance').on('click', (e)=>{
+            console.log('tick');
+            yl.tick_all();
+            yl.draw_all($layer_cont);
+        });
+        </script>
+        <script>
+            /*
+            剧情：一个人特别爱六只马(pony)，这是他家的电表发生的变化……
+                为了穿越到六马的世界，他读了很多书，发现要扭曲空间，需要很多能量。因此他开始搭建生产线，产出能量。
+            类factorio：
+                能量发展线：
+                    ->人力(要耗饭)/市电(需要付钱)（插口有限）
+                    ->村里大爷大妈人力(要耗饭)
+                    ->太阳能(一次投入的钱多，产出的少，但是后面免费)/火力发电(用煤炉子改的，要付煤费，可以顺便产出饭)
+                    ->自己采煤发电/地热发电
+                    ->核能发电（聚变发电）
+                    ->真空零点能发电
+                    ->宇宙际强相互力梯度差势发电（反向向里面传能量就可以完成游戏目标）
+                资源：
+                    粮食、饭、煤、铁矿、石、铀矿、水、重水
+                    铁、铀、铅
+                    反铁
+                    微虫洞
+                    火、炎、焱、光、电
+                    废料（辣鸡）
+                    智子
+                机器：
+                    - 物流
+                        - 传送带（运送物品）
+                        - 传送梯（跨层传送带）
+                        - 路由器（随机分物品）
+                    - 能量转化
+                        - 势能电池：抬升机消耗电转化成激发态，放电转化成基态（可以手动消耗饭激发）；村民消耗饭，将旁边的抬升机激发
+                        - 热能发电：炉子将煤转化成火，蒸汽机将火转化成电；大棚将光转化成粮食，粮食在炉子转化成饭，饭在炉子转化成煤
+                        - 太阳能电池：把光转化成火；LED灯把电转化成光
+                        - 化学电池：电炉（消耗电把铁矿变铁）+ 原电池（把铁变铁矿，产生电）
+                        - 可逆核过程电池：核反应堆把铀变铅，放能，核子置入器把铅变铀，吸能
+                        - 反物质电池：光子对撞机吸能产生铁和反铁，两者在约束反应器中产生能量
+                        - 虫洞电池：时空界面消耗能量产生微虫洞，微虫洞在时空界面分解产生能量
+                    - （变压器：转换电压
+                    - 电动车充电（消耗电，产生金钱）
+                    - （显卡（消耗电，产生算力）
+                    - （手机（消耗电，产生网络数据包）
+                    - （加密货币钱包（消耗算力和网络数据包，产生金钱）
+                    - 电炉（冶炼矿物）
+                    - （银行（兑换钱的面额）
+                    - （研究科技，计算机消耗算力还有网络数据包（还有材料？），可以研究科技，刚开始不用计算机，是拿煤做书读书
+                    - 钻头（挖矿）
+                    - 水泵（挖水，提取重水）
+                    - 机械能/齿轮放大做的功
+                固定设施：
+                    - 商店（购买粮食，煤、铁、石）
+                    - 插座、电表：把钱输入电表，插座就可以出电
+                    - 太阳（产生光）
+                    - 田地（输入光产生粮食）
+                世界场景：自己的家里面、院子（可以自由放东西的地图，有2层）/邻居、商店（只是可以交互的场景）/手（一格空间可以存物品）
+                有的属性：金钱（元）、饥饿值、时间（白天黑夜、星期）
+                剧情邻居人物：赵犰狳、钱蝙蝠、孙骆驼、李蜻蜓、...
+
+            写得很烂能乱玩就可以了，千万不要尝试抽象，写什么类
+            */
+        </script>
+    </body>
+</html>
