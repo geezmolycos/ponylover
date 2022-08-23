@@ -41,7 +41,11 @@
         </style>
     </head>
     <body>
-        <button id="advance">advance</button>
+        <div>
+            <button id="advance">advance</button>
+            <button id="stop">stop</button>
+            <span id="time">0</span>
+        </div>
         <script>
             'use strict'
 
@@ -52,41 +56,137 @@
                 tick(inst){}
                 draw(inst){}
                 info(inst){}
+                enum_states(){
+                    return [];
+                }
+                init_other_states(state){}
+            }
+
+            function entity_dir_target(inst){
+                let [dx, dy] = cardinal[inst.state.dir];
+                let [tx, ty] = [inst.x + dx, inst.y + dy];
+                return [tx, ty];
+            }
+
+            function entity_output_item(inst, item_type, item_state){
+                let [tx, ty] = entity_dir_target(inst);
+                if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
+                    || inst.layer.get_item_changed(tx, ty)
+                    || !inst.layer.can_place_item_on(tx, ty)){
+                    return false;
+                }
+                inst.layer.next_item_sublayer.swap(tx, ty, item_type, item_state);
+                inst.layer.set_item_changed(tx, ty, true);
+                return true;
             }
 
             class BeltEnt{
+                constructor(delay){
+                    this.delay = delay;
+                }
                 can_place_item_on(inst){return true;}
                 tick(inst){
-                    console.log(inst.x, inst.y);
-                    if (inst.layer.item_sublayer.type[inst.layer.xy2i(inst.x, inst.y)] === item_table.get('empty')
-                        || inst.layer.belt_item_fixed[inst.layer.xy2i(inst.x, inst.y)] ){
+                    if (inst.layer.time % this.delay != 0){
                         return;
                     }
-                    let [dx, dy] = cardinal[inst.state.dir];
-                    let tx = inst.x + dx;
-                    let ty = inst.y + dy;
-                    if (inst.layer.item_sublayer.type[inst.layer.xy2i(tx, ty)] !== item_table.get('empty')
-                        || !inst.layer.can_place_item_on(tx, ty)){
+                    //console.log(inst.x, inst.y);
+                    if (inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
                         return;
                     }
-                    let [old_type, old_state] = inst.layer.item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                    inst.layer.item_sublayer.swap(tx, ty, old_type, old_state);
-                    inst.layer.belt_item_fixed[inst.layer.xy2i(tx, ty)] = true;
-                    for (let back_dir of cardinal){
-                        let [bx, by] = back_dir;
-                        if (bx === dx && by === dy){
-                            continue;
+                    let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
+                    if (entity_output_item(inst, old_item_inst.type, old_item_inst.state)){
+                        inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                        inst.layer.set_item_changed(inst.x, inst.y, true);
+                    }
+                }
+                draw(inst){
+                    let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
+                    return $('<div>')
+                        .css('background-image', `url('./belt.png')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%')
+                        .css('height', '100%')
+                        .css('transform', `rotate(${rotation})`);
+                }
+                info(inst){}
+                enum_states(){
+                    return [
+                        ['dir', [0,1,2,3]],
+                    ];
+                }
+                init_other_states(state){}
+            }
+
+            class MachineEnt{
+                constructor(ingredient_f, amounts, product_type, product_state){
+                    this.ingredient_f = ingredient_f;
+                    this.amounts = amounts;
+                    this.product_type = product_type;
+                    this.product_state = product_state;
+                }
+                can_place_item_on(inst){return true;}
+                check_fulfill(inst){
+                    if (inst.state.fulfilled){
+                        return true;
+                    }
+                    let fulfilled = true;
+                    $.each(this.amounts, (i, val) => {
+                        if (inst.state.current_amounts[i] < val){
+                            fulfilled = false;
+                            return false;
                         }
-                        if (inst.layer.entity_sublayer.type[inst.layer.xy2i(inst.x + bx, inst.y + by)] instanceof BeltEnt){
-                            console.log('backtrack');
-                            inst.layer.tick_at(inst.x + bx, inst.y + by);
+                    });
+                    return fulfilled;
+                }
+                tick(inst){
+                    if (inst.layer.get_item_changed(inst.x, inst.y)
+                        || inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                        return;
+                    }
+                    let ingredient_i = this.ingredient_f(
+                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).type,
+                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).state
+                    )
+                    if (ingredient_i === -1){
+                        if (inst.layer.time % 5 != 0){
+                            return;
+                        }
+                        let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
+                        if (entity_output_item(inst, old_item_inst.type, old_item_inst.state)){
+                            inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                            inst.layer.set_item_changed(inst.x, inst.y, true);
+                        }
+                        return;
+                    }
+                    inst.state.current_amounts[ingredient_i]++;
+                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                    if (this.check_fulfill(inst)){
+                        inst.state.fulfilled = true;
+                        if (entity_output_item(inst, this.product_type, this.product_state)){
+                            this.init_other_states(inst.state);
                         }
                     }
                 }
                 draw(inst){
-                    return $('<div>').text(`b${inst.state.dir}`).css('position', 'absolute');
+                    let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
+                    return $('<div>')
+                        .css('background-image', `url('./gen.png')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%')
+                        .css('height', '100%')
+                        .css('transform', `rotate(${rotation})`);
                 }
                 info(inst){}
+                enum_states(){
+                    return [
+                        ['dir', [0,1,2,3]],
+                    ];
+                }
+                init_other_states(state){
+                    state.fulfilled = false;
+                    state.current_amounts = new Array(this.amounts.length).fill(0);
+                }
             }
 
             class EmptyItem{
@@ -99,19 +199,24 @@
                     this.icon = icon;
                 }
                 draw(inst){
-                    return $('<div>').css('background-image', `url('${this.icon}')`).css('background-size', '100% 100%').css('width', '100%').css('height', '100%');
+                    return $('<div>')
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%').css('height', '100%');
                 }
                 info(inst){}
             }
 
-            const entity_table = new Map([
-                ['empty', new EmptyEnt()],
-                ['belt', new BeltEnt()],
+            let item_table = new Map([
+                ['empty', new EmptyItem()],
+                ['iron', new IconItem("./iron.png")],
+                ['elec', new IconItem("./elec.png")],
             ]);
 
-            const item_table = new Map([
-                ['empty', new EmptyItem()],
-                ['test', new IconItem("./test.png")],
+            let entity_table = new Map([
+                ['empty', new EmptyEnt()],
+                ['belt', new BeltEnt(5)],
+                ['gen', new MachineEnt((type, state)=>(type == item_table.get('iron') ? 0 : -1), [3], item_table.get('elec'), null)],
             ]);
 
             class YardSubLayer{
@@ -176,8 +281,28 @@
                     this.width = width;
                     this.height = height;
                     this.entity_sublayer = new YardSubLayer(this, entity_table.get('empty'));
+                    this.next_entity_sublayer = new YardSubLayer(this, entity_table.get('empty'));
+                    this.entity_changed = new Array(this.width * this.height).fill(false);
                     this.item_sublayer = new YardSubLayer(this, item_table.get('empty'));
-                    this.belt_item_fixed = new Array(this.width * this.height).fill(false);
+                    this.next_item_sublayer = new YardSubLayer(this, item_table.get('empty'));
+                    this.item_changed = new Array(this.width * this.height).fill(false);
+                    this.time = 0;
+                }
+
+                get_entity_changed(x, y){
+                    return this.entity_changed[this.xy2i(x, y)];
+                }
+                
+                set_entity_changed(x, y, val){
+                    this.entity_changed[this.xy2i(x, y)] = val;
+                }
+
+                get_item_changed(x, y){
+                    return this.item_changed[this.xy2i(x, y)];
+                }
+
+                set_item_changed(x, y, val){
+                    this.item_changed[this.xy2i(x, y)] = val;
                 }
 
                 can_place_item_on(x, y){
@@ -185,7 +310,8 @@
                         return false;
                     }
                     let inst = this.entity_sublayer.get_inst(x, y);
-                    return inst.type.can_place_item_on(inst);
+                    let ninst = this.next_entity_sublayer.get_inst(x, y);
+                    return inst.type.can_place_item_on(inst) && ninst.type.can_place_item_on(ninst);
                 }
 
                 xy2i(x, y){
@@ -200,13 +326,31 @@
                     return 0 <= x && x < this.width && 0 <= y && y < this.height;
                 }
 
+                do_tick_reversed(){
+                    return this.time % 4 < 2;
+                }
+
                 tick_all(){
-                    for (let y=0; y<this.height; y++){
-                        for (let x=0; x<this.width; x++){
-                            this.tick_at(x, y);
+                    if (this.do_tick_reversed()){
+                        for (let y=0; y<this.height; y++){
+                            for (let x=0; x<this.width; x++){
+                                this.tick_at(this.width - x - 1, this.height - y - 1);
+                            }
+                        }
+                    } else {
+                        for (let y=0; y<this.height; y++){
+                            for (let x=0; x<this.width; x++){
+                                this.tick_at(x, y);
+                            }
                         }
                     }
-                    this.belt_item_fixed.fill(false);
+                    this.item_sublayer.type = [...this.next_item_sublayer.type];
+                    this.item_sublayer.state = new Map(this.next_item_sublayer.state);
+                    this.item_changed.fill(false);
+                    this.entity_sublayer.type = [...this.next_entity_sublayer.type];
+                    this.entity_sublayer.state = new Map(this.next_entity_sublayer.state);
+                    this.entity_changed.fill(false);
+                    this.time++;
                 }
 
                 tick_at(x, y){
@@ -219,6 +363,12 @@
                     let $grid_cont = this.entity_sublayer.make_cont().addClass('grid-cont');
                     let $entity_cont = this.entity_sublayer.make_cont().addClass('entity-sublayer-cont');
                     let $item_cont = this.item_sublayer.make_cont().addClass('item-sublayer-cont');
+                    let $mouseclick_cont = this.entity_sublayer.make_cont().addClass('mouseclick-cont');
+                    $mouseclick_cont.children('.cell-wrapper').on('click', (e)=>{
+                        let x = $(this).data('x');
+                        let y = $(this).data('y');
+                        // TODO
+                    });
                     $cont.append($grid_cont).append($entity_cont).append($item_cont);
                     return $cont;
                 }
@@ -235,23 +385,36 @@
         
         let $layer_cont = yl.make_cont();
         $('body').append($layer_cont);
-        yl.item_sublayer.swap(1, 0, item_table.get('test'), null);
-        yl.item_sublayer.swap(1, 1, item_table.get('test'), null);
-        yl.item_sublayer.swap(1, 3, item_table.get('test'), null);
-        yl.item_sublayer.swap(1, 4, item_table.get('test'), null);
-        yl.entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
-        yl.entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
-        yl.entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
-        yl.entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
-        yl.entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
-        yl.entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-        yl.entity_sublayer.swap(3, 2, entity_table.get('belt'), {dir: 2});
-        yl.entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
+        yl.next_item_sublayer.swap(1, 0, item_table.get('iron'), null);
+        yl.next_item_sublayer.swap(1, 1, item_table.get('iron'), null);
+        yl.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
+        yl.next_item_sublayer.swap(1, 2, item_table.get('iron'), null);
+        yl.next_item_sublayer.swap(1, 3, item_table.get('iron'), null);
+        yl.next_item_sublayer.swap(1, 4, item_table.get('iron'), null);
+        yl.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
+        yl.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
+        yl.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
+        yl.next_entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
+        yl.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
+        yl.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
+        yl.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
+        yl.next_entity_sublayer.swap(3, 2, entity_table.get('gen'), {dir: 2});
+        let bi = yl.next_entity_sublayer.get_inst(3, 2)
+        bi.type.init_other_states(bi.state);
+        yl.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
+        yl.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
+        yl.tick_all();
         yl.draw_all($layer_cont);
+        let ikk = -1;
         $('#advance').on('click', (e)=>{
-            console.log('tick');
-            yl.tick_all();
-            yl.draw_all($layer_cont);
+            ikk = setInterval(()=>{
+                $("#time").text(yl.time);
+                yl.tick_all();
+                yl.draw_all($layer_cont);
+            }, 50);
+        });
+        $('#stop').on('click', (e)=>{
+            clearInterval(ikk);
         });
         </script>
         <script>
@@ -272,14 +435,15 @@
                     铁、铀、铅
                     反铁
                     微虫洞
-                    火、炎、焱、光、电
-                    废料（辣鸡）
-                    智子
+                    火（炎、焱）光、电
+                    （废料（辣鸡）
+                    （智子
                 机器：
                     - 物流
                         - 传送带（运送物品）
                         - 传送梯（跨层传送带）
                         - 路由器（随机分物品）
+                        - 分类器（按类别分物品）
                     - 能量转化
                         - 势能电池：抬升机消耗电转化成激发态，放电转化成基态（可以手动消耗饭激发）；村民消耗饭，将旁边的抬升机激发
                         - 热能发电：炉子将煤转化成火，蒸汽机将火转化成电；大棚将光转化成粮食，粮食在炉子转化成饭，饭在炉子转化成煤
