@@ -57,7 +57,7 @@
                 can_place_item_on(inst){return true;}
                 tick(inst){}
                 draw(inst){}
-                info(inst){}
+                info(inst){return '什么也没有';}
                 enum_states(){
                     return [];
                 }
@@ -70,8 +70,7 @@
                 return [tx, ty];
             }
 
-            function entity_output_item(inst, item_type, item_state){
-                let [tx, ty] = entity_dir_target(inst);
+            function entity_output_item(inst, tx, ty, item_type, item_state){
                 if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
                     || inst.layer.get_item_changed(tx, ty)
                     || !inst.layer.can_place_item_on(tx, ty)){
@@ -79,6 +78,21 @@
                 }
                 inst.layer.next_item_sublayer.swap(tx, ty, item_type, item_state);
                 inst.layer.set_item_changed(tx, ty, true);
+                return true;
+            }
+
+            function entity_output_two_items(inst, txa, tya, txb, tyb, item_type_a, item_state_a, item_type_b, item_state_b){
+                for (let [tx, ty] of [[txa, tya], [txb, tyb]]){
+                    if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
+                        || inst.layer.get_item_changed(tx, ty)
+                        || !inst.layer.can_place_item_on(tx, ty)){
+                        return false;
+                    }
+                }
+                inst.layer.next_item_sublayer.swap(txa, tya, item_type_a, item_state_a);
+                inst.layer.set_item_changed(txa, tya, true);
+                inst.layer.next_item_sublayer.swap(txb, tyb, item_type_b, item_state_b);
+                inst.layer.set_item_changed(txb, tyb, true);
                 return true;
             }
 
@@ -96,7 +110,8 @@
                         return;
                     }
                     let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
-                    if (entity_output_item(inst, old_item_inst.type, old_item_inst.state)){
+                    let [tx, ty] = entity_dir_target(inst);
+                    if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
                         inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
                         inst.layer.set_item_changed(inst.x, inst.y, true);
                     }
@@ -110,7 +125,7 @@
                         .css('height', '100%')
                         .css('transform', `rotate(${rotation})`);
                 }
-                info(inst){}
+                info(inst){return '传送带'}
                 enum_states(){
                     return [
                         ['dir', [0,1,2,3]],
@@ -183,15 +198,10 @@
                     } else {
                         ty += leftup ? -1 : 1;
                     }
-                    if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
-                        || inst.layer.get_item_changed(tx, ty)
-                        || !inst.layer.can_place_item_on(tx, ty)){
-                        return;
+                    if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
+                        inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                        inst.layer.set_item_changed(inst.x, inst.y, true);
                     }
-                    inst.layer.next_item_sublayer.swap(tx, ty, old_item_inst.type, old_item_inst.state);
-                    inst.layer.set_item_changed(tx, ty, true);
-                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                    inst.layer.set_item_changed(inst.x, inst.y, true);
                 }
                 draw(inst){
                     let rotation = ['0deg', '90deg'][inst.state.hv];
@@ -247,7 +257,8 @@
                             return;
                         }
                         let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
-                        if (entity_output_item(inst, old_item_inst.type, old_item_inst.state)){
+                        let [tx, ty] = entity_dir_target(inst);
+                        if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
                             inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
                             inst.layer.set_item_changed(inst.x, inst.y, true);
                         }
@@ -258,7 +269,8 @@
                     inst.layer.set_item_changed(inst.x, inst.y, true);
                     if (this.check_fulfill(inst)){
                         inst.state.fulfilled = true;
-                        if (entity_output_item(inst, this.product_type, this.product_state)){
+                        let [tx, ty] = entity_dir_target(inst);
+                        if (entity_output_item(inst, tx, ty, this.product_type, this.product_state)){
                             this.init_other_states(inst.state);
                         }
                     }
@@ -282,6 +294,90 @@
                     state.fulfilled = false;
                     state.current_amounts = new Array(this.amounts.length).fill(0);
                 }
+            }
+
+            class TwoOutputMachineEnt{
+                constructor(ingredient_f, amounts, product_type_a, product_state_a, product_type_b, product_state_b){
+                    this.ingredient_f = ingredient_f;
+                    this.amounts = amounts;
+                    this.product_type_a = product_type_a;
+                    this.product_state_a = product_state_a;
+                    this.product_type_b = product_type_b;
+                    this.product_state_b = product_state_b;
+                }
+                can_place_item_on(inst){return true;}
+                check_fulfill(inst){
+                    if (inst.state.fulfilled){
+                        return true;
+                    }
+                    let fulfilled = true;
+                    $.each(this.amounts, (i, val) => {
+                        if (inst.state.current_amounts[i] < val){
+                            fulfilled = false;
+                            return false;
+                        }
+                    });
+                    return fulfilled;
+                }
+                hv(inst){
+                    return inst.state.dir == 0 || inst.state.dir == 3 ? 1 : 0;
+                }
+                tick(inst){
+                    if (inst.layer.get_item_changed(inst.x, inst.y)
+                        || inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                        return;
+                    }
+                    let ingredient_i = this.ingredient_f(
+                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).type,
+                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).state
+                    )
+                    if (ingredient_i === -1){
+                        if (inst.layer.time % 5 != 0){
+                            return;
+                        }
+                        let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
+                        let [tx, ty] = entity_dir_target(inst);
+                        if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
+                            inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                            inst.layer.set_item_changed(inst.x, inst.y, true);
+                        }
+                        return;
+                    }
+                    inst.state.current_amounts[ingredient_i]++;
+                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                    if (this.check_fulfill(inst)){
+                        inst.state.fulfilled = true;
+                        let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
+                        if (this.hv(inst) == 0){
+                            txa--; txb++;
+                        } else {
+                            tya--; tyb++;
+                        }
+                        if (entity_output_two_items(inst, txa, tya, txb, tyb,
+                            this.product_type_a, this.product_state_a,
+                            this.product_type_b, this.product_state_b)
+                            ){
+                            this.init_other_states(inst.state);
+                        }
+                    }
+                }
+                draw(inst){
+                    let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
+                    return $('<div>')
+                        .css('background-image', `url('./gen.png')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%')
+                        .css('height', '100%')
+                        .css('transform', `rotate(${rotation})`);
+                }
+                info(inst){}
+                enum_states(){
+                    return [
+                        ['dir', [0,1,2,3]],
+                    ];
+                }
+                init_other_states(state){}
             }
 
             class EmptyItem{
@@ -554,6 +650,7 @@
                 }
                 selector_layer.draw_all($selector_layer_cont);
             }
+            redraw_hand_and_selector();
 
             ground_layer.on_mouse_place_entity = underground_layer.on_mouse_place_entity = (inst)=>{
                 let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
