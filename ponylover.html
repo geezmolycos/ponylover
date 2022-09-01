@@ -31,6 +31,8 @@
             .grid-cont{
                 border-bottom: var(--game-grid-border) solid black;
                 border-right: var(--game-grid-border) solid black;
+                position: static;
+                display: inline-block;
             }
             .grid-cont .cell-wrapper{
                 border-top: var(--game-grid-border) solid black;
@@ -116,6 +118,99 @@
                 }
                 init_other_states(state){}
             }
+
+            class LadderEnt{
+                constructor(delay){
+                    this.delay = delay;
+                }
+                can_place_item_on(inst){return true;}
+                tick(inst){
+                    if (inst.layer.time % this.delay != 0){
+                        return;
+                    }
+                    //console.log(inst.x, inst.y);
+                    if (inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                        return;
+                    }
+                    let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
+                    let tx = inst.x;
+                    let ty = inst.y;
+                    if (inst.layer.ladder_layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
+                        || inst.layer.ladder_layer.get_item_changed(tx, ty)
+                        || !inst.layer.ladder_layer.can_place_item_on(tx, ty)){
+                        return;
+                    }
+                    inst.layer.ladder_layer.next_item_sublayer.swap(tx, ty, old_item_inst.type, old_item_inst.state);
+                    inst.layer.ladder_layer.set_item_changed(tx, ty, true);
+                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                }
+                draw(inst){
+                    return $('<div>')
+                        .css('background-image', `url('./ladder.png')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%')
+                        .css('height', '100%');
+                }
+                info(inst){}
+                enum_states(){
+                    return [];
+                }
+                init_other_states(state){}
+            }
+
+            class RouterEnt{
+                constructor(delay){
+                    this.delay = delay;
+                }
+                can_place_item_on(inst){return true;}
+                tick(inst){
+                    if (inst.layer.time % this.delay != 0){
+                        return;
+                    }
+                    //console.log(inst.x, inst.y);
+                    if (inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                        return;
+                    }
+                    let tick_time = Math.floor(inst.layer.time / this.delay);
+                    let leftup = tick_time % 6 == 0 || tick_time % 6 == 1 || tick_time % 6 == 4;
+                    let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
+
+                    let tx = inst.x;
+                    let ty = inst.y;
+                    if (inst.state.hv == 0){
+                        tx += leftup ? -1 : 1;
+                    } else {
+                        ty += leftup ? -1 : 1;
+                    }
+                    if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
+                        || inst.layer.get_item_changed(tx, ty)
+                        || !inst.layer.can_place_item_on(tx, ty)){
+                        return;
+                    }
+                    inst.layer.next_item_sublayer.swap(tx, ty, old_item_inst.type, old_item_inst.state);
+                    inst.layer.set_item_changed(tx, ty, true);
+                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                }
+                draw(inst){
+                    let rotation = ['0deg', '90deg'][inst.state.hv];
+                    return $('<div>')
+                        .css('background-image', `url('./router.png')`)
+                        .css('background-size', '100% 100%')
+                        .css('width', '100%')
+                        .css('height', '100%')
+                        .css('transform', `rotate(${rotation})`);
+                }
+                info(inst){}
+                enum_states(){
+                    return [
+                        ['hv', [0, 1]]
+                    ];
+                }
+                init_other_states(state){}
+            }
+
 
             class MachineEnt{
                 constructor(ingredient_f, amounts, product_type, product_state){
@@ -216,14 +311,15 @@
             let entity_table = new Map([
                 ['empty', new EmptyEnt()],
                 ['belt', new BeltEnt(5)],
+                ['ladder', new LadderEnt(5)],
+                ['router', new RouterEnt(5)],
                 ['gen', new MachineEnt((type, state)=>(type == item_table.get('iron') ? 0 : -1), [3], item_table.get('elec'), null)],
             ]);
 
             class YardSubLayer{
                 constructor(layer, init_val){
                     this.layer = layer;
-                    this.type = new Array(this.layer.width * this.layer.height).fill(init_val);
-                    this.state = new Map();
+                    this.empty(init_val);
                 }
 
                 swap(x, y, new_type, new_state){
@@ -273,6 +369,12 @@
                         let c = inst.type.draw(inst);
                         $wrapper.append(c);
                     });
+                }
+
+
+                empty(init_val){
+                    this.type = new Array(this.layer.width * this.layer.height).fill(init_val);
+                    this.state = new Map();
                 }
             }
 
@@ -358,6 +460,14 @@
                     inst.type.tick(inst);
                 }
 
+                on_mouse_place_entity(inst){
+                    return {
+                        able: true,
+                        type: entity_table.get('empty'),
+                        state: null
+                    };
+                }
+
                 make_cont(){
                     let $cont = $('<div>').addClass('layer-cont');
                     let $grid_cont = this.entity_sublayer.make_cont().addClass('grid-cont');
@@ -365,57 +475,134 @@
                     let $item_cont = this.item_sublayer.make_cont().addClass('item-sublayer-cont');
                     let $mouseclick_cont = this.entity_sublayer.make_cont().addClass('mouseclick-cont');
                     $mouseclick_cont.children('.cell-wrapper').on('click', (e)=>{
-                        let x = $(this).data('x');
-                        let y = $(this).data('y');
-                        // TODO
+                        let x = $(e.target).data('x');
+                        let y = $(e.target).data('y');
+                        let inst = this.next_entity_sublayer.get_inst(x, y);
+                        let res = this.on_mouse_place_entity(inst);
+                        if (!res.able){
+                            return;
+                        }
+                        this.next_entity_sublayer.swap(x, y, res.type, res.state);
                     });
-                    $cont.append($grid_cont).append($entity_cont).append($item_cont);
+                    $cont.append($grid_cont).append($entity_cont).append($item_cont).append($mouseclick_cont);
                     return $cont;
                 }
 
                 draw_all($layer_cont){
                     let $entity_cont = $layer_cont.children('.entity-sublayer-cont');
                     let $item_cont = $layer_cont.children('.item-sublayer-cont');
-                    this.entity_sublayer.draw_all($entity_cont);
-                    this.item_sublayer.draw_all($item_cont);
+                    this.next_entity_sublayer.draw_all($entity_cont);
+                    this.next_item_sublayer.draw_all($item_cont);
                 }
             }
         
-        let yl = new YardLayer(5, 5);
-        
-        let $layer_cont = yl.make_cont();
-        $('body').append($layer_cont);
-        yl.next_item_sublayer.swap(1, 0, item_table.get('iron'), null);
-        yl.next_item_sublayer.swap(1, 1, item_table.get('iron'), null);
-        yl.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
-        yl.next_item_sublayer.swap(1, 2, item_table.get('iron'), null);
-        yl.next_item_sublayer.swap(1, 3, item_table.get('iron'), null);
-        yl.next_item_sublayer.swap(1, 4, item_table.get('iron'), null);
-        yl.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
-        yl.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
-        yl.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
-        yl.next_entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
-        yl.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
-        yl.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
-        yl.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-        yl.next_entity_sublayer.swap(3, 2, entity_table.get('gen'), {dir: 2});
-        let bi = yl.next_entity_sublayer.get_inst(3, 2)
-        bi.type.init_other_states(bi.state);
-        yl.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
-        yl.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
-        yl.tick_all();
-        yl.draw_all($layer_cont);
-        let ikk = -1;
-        $('#advance').on('click', (e)=>{
-            ikk = setInterval(()=>{
-                $("#time").text(yl.time);
-                yl.tick_all();
-                yl.draw_all($layer_cont);
-            }, 50);
-        });
-        $('#stop').on('click', (e)=>{
-            clearInterval(ikk);
-        });
+            let ground_layer = new YardLayer(10, 5);
+            let underground_layer = new YardLayer(10, 5);
+            ground_layer.ladder_layer = underground_layer;
+            underground_layer.ladder_layer = ground_layer;
+
+            let hand_layer = new YardLayer(1, 1);
+            hand_layer.get_entity_inst = function(){
+                return this.next_entity_sublayer.get_inst(0, 0);
+            }
+            hand_layer.get_item_inst = function(){
+                return this.next_item_sublayer.get_inst(0, 0);
+            }
+            let $hand_layer_cont = hand_layer.make_cont();
+            $('body').append($hand_layer_cont);
+            ground_layer.hand_layer = hand_layer;
+            underground_layer.hand_layer = hand_layer;
+
+            let $state_selector_cont = $('<div>').addClass('state-selector-cont');
+            $state_selector_cont.append($('<div>').addClass('item-info'));
+            $state_selector_cont.append($('<div>').addClass('state-enum'));
+            let selector_layer = new YardLayer(8, 3);
+            let $selector_layer_cont = selector_layer.make_cont();
+            $state_selector_cont.children('.state-enum').append($selector_layer_cont);
+            $('body').append($state_selector_cont);
+
+            selector_layer.on_mouse_place_entity = (inst)=>{
+                if (inst.type == entity_table.get('empty')){
+                    return {
+                        able: false
+                    };
+                }
+                let [swap_out_type, swap_out_state] = hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
+                redraw_hand_and_selector();
+                return {
+                    able: false
+                };
+            }
+
+            function redraw_hand_and_selector(){
+                hand_layer.draw_all($hand_layer_cont);
+                let entity_inst = hand_layer.get_entity_inst();
+                let info = entity_inst.type.info(entity_inst);
+                $state_selector_cont.children('.item-info').empty();
+                $state_selector_cont.children('.item-info').append(info);
+                let enum_states = entity_inst.type.enum_states();
+                let x=0, y=0;
+                selector_layer.next_entity_sublayer.empty(entity_table.get('empty'));
+                for (let [state_key, state_values] of enum_states){
+                    for (let v of state_values){
+                        let new_state = structuredClone(entity_inst.state);
+                        new_state[state_key] = v;
+                        selector_layer.next_entity_sublayer.swap(x, y, entity_inst.type, new_state);
+                        x++;
+                    }
+                    y++
+                }
+                selector_layer.draw_all($selector_layer_cont);
+            }
+
+            ground_layer.on_mouse_place_entity = underground_layer.on_mouse_place_entity = (inst)=>{
+                let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
+                redraw_hand_and_selector();
+                return {
+                    able: true,
+                    type: swap_out_type,
+                    state: swap_out_state
+                };
+            }
+            
+            let $layer_cont = ground_layer.make_cont();
+            let $underground_layer_cont = underground_layer.make_cont();
+            $('body').append($layer_cont);
+            $('body').append($underground_layer_cont);
+            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
+            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('iron'), null);
+            ground_layer.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
+            ground_layer.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
+            ground_layer.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('gen'), {dir: 2});
+            let bi = ground_layer.next_entity_sublayer.get_inst(3, 2)
+            bi.type.init_other_states(bi.state);
+            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(4, 4, entity_table.get('ladder'));
+            ground_layer.next_entity_sublayer.swap(5, 4, entity_table.get('router'), {hv: 0});
+            ground_layer.draw_all($layer_cont);
+            let ikk = -1;
+            $('#advance').on('click', (e)=>{
+                ikk = setInterval(()=>{
+                    $("#time").text(ground_layer.time);
+                    ground_layer.tick_all();
+                    ground_layer.draw_all($layer_cont);
+                    underground_layer.tick_all();
+                    underground_layer.draw_all($underground_layer_cont);
+                }, 50);
+            });
+            $('#stop').on('click', (e)=>{
+                clearInterval(ikk);
+            });
         </script>
         <script>
             /*
