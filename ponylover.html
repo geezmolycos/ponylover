@@ -669,6 +669,26 @@
             ground_layer.ladder_layer = underground_layer;
             underground_layer.ladder_layer = ground_layer;
 
+            ground_layer.on_mouse_place_entity = underground_layer.on_mouse_place_entity = (inst)=>{
+                if (!inst.type.can_be_moved(inst)){
+                    return {
+                        able: false
+                    };
+                }
+                let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
+                redraw_hand_and_selector();
+                return {
+                    able: true,
+                    type: swap_out_type,
+                    state: swap_out_state
+                };
+            }
+            
+            let $layer_cont = ground_layer.make_cont();
+            let $underground_layer_cont = underground_layer.make_cont();
+            $('body').append($layer_cont);
+            $('body').append($underground_layer_cont);
+
             let hand_layer = new YardLayer(1, 1);
             hand_layer.get_entity_inst = function(){
                 return this.next_entity_sublayer.get_inst(0, 0);
@@ -732,25 +752,94 @@
             }
             redraw_hand_and_selector();
 
-            ground_layer.on_mouse_place_entity = underground_layer.on_mouse_place_entity = (inst)=>{
-                if (!inst.type.can_be_moved(inst)){
-                    return {
-                        able: false
-                    };
+            let crafting_layer = new YardLayer(8, 4);
+
+            let crafting_recipes = [
+                {
+                    in: [['elec', 1]],
+                    out: 'belt'
                 }
-                let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
-                redraw_hand_and_selector();
-                return {
-                    able: true,
-                    type: swap_out_type,
-                    state: swap_out_state
-                };
+            ];
+            let crafting_recipes_positioned = new Map();
+
+            let ground_crafting_region = {
+                xa: 0, ya: 0, xb: 3, yb: 2
             }
-            
-            let $layer_cont = ground_layer.make_cont();
-            let $underground_layer_cont = underground_layer.make_cont();
-            $('body').append($layer_cont);
-            $('body').append($underground_layer_cont);
+
+            function get_default_state(entity_type){
+                let state = {};
+                for (let [state_key, values] of entity_type.enum_states()){
+                    state[state_key] = values[0];
+                }
+                entity_type.init_other_states(state);
+                return state;
+            }
+
+            function put_crafting(){
+                let x = 0, y = 0;
+                for (let recipe of crafting_recipes){
+                    if (recipe.br){
+                        y++;
+                        continue;
+                    }
+                    crafting_recipes_positioned.set(crafting_layer.xy2i(x, y), recipe);
+                    let out_type = entity_table.get(recipe.out);
+                    crafting_layer.next_entity_sublayer.swap(x, y, out_type, get_default_state(out_type));
+                    x++;
+                    if (x >= crafting_layer.width){
+                        y++;
+                        x = 0;
+                    }
+                }
+            }
+            put_crafting();
+
+            function can_craft(in_list, do_craft=false){
+                let need_count = new Map();
+                for (let [item_key, item_amount] of in_list){
+                    need_count.set(item_table.get(item_key), item_amount);
+                }
+                for (let y=ground_crafting_region.ya; y<ground_crafting_region.yb; y++){
+                    for (let x=ground_crafting_region.xa; x<ground_crafting_region.xb; x++){
+                        let inst = ground_layer.next_item_sublayer.get_inst(x, y);
+                        if (need_count.has(inst.type)){
+                            if (do_craft){
+                                ground_layer.next_item_sublayer.swap(x, y, item_table.get('empty'), null);
+                                ground_layer.set_item_changed(x, y, true);
+                            }
+                            need_count.set(inst.type, need_count.get(inst.type) - 1);
+                            if (need_count.get(inst.type) == 0){
+                                need_count.delete(inst.type);
+                                if (need_count.size == 0){
+                                    return need_count;
+                                }
+                            }
+                        }
+                    }
+                }
+                return need_count;
+            }
+
+            crafting_layer.on_mouse_place_entity = function(inst){
+                let i = inst.layer.xy2i(inst.x, inst.y);
+                let recipe = crafting_recipes_positioned.get(i);
+                if (hand_layer.next_entity_sublayer.get_inst(0, 0).type !== entity_table.get('empty')){
+                    return {able: false};
+                }
+                if (can_craft(recipe.in)){
+                    can_craft(recipe.in, true);
+                    let out_type = entity_table.get(recipe.out);
+                    hand_layer.next_entity_sublayer.swap(0, 0, out_type, get_default_state(out_type));
+                    redraw_hand_and_selector();
+                }
+                return {able: false};
+            }
+
+            let $crafting_cont = crafting_layer.make_cont();
+            $('body').append($crafting_cont);
+            crafting_layer.draw_all($crafting_cont);
+
+
             ground_layer.next_item_sublayer.swap(1, 0, item_table.get('iron'), null);
             ground_layer.next_item_sublayer.swap(1, 1, item_table.get('iron'), null);
             ground_layer.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
