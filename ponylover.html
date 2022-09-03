@@ -65,6 +65,12 @@
                 init_other_states(state){}
             }
 
+            function entity_dir_source(inst){
+                let [dx, dy] = cardinal[inst.state.dir];
+                let [tx, ty] = [inst.x - dx, inst.y - dy];
+                return [tx, ty];
+            }
+
             function entity_dir_target(inst){
                 let [dx, dy] = cardinal[inst.state.dir];
                 let [tx, ty] = [inst.x + dx, inst.y + dy];
@@ -299,7 +305,7 @@
                     this.product_type = product_type;
                     this.product_state = product_state;
                 }
-                can_place_item_on(inst){return true;}
+                can_place_item_on(inst){return false;}
                 check_fulfill(inst){
                     if (inst.state.fulfilled){
                         return true;
@@ -314,29 +320,21 @@
                     return fulfilled;
                 }
                 tick(inst){
-                    if (inst.layer.get_item_changed(inst.x, inst.y)
-                        || inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                    let [sx, sy] = entity_dir_source(inst);
+                    if (inst.layer.get_item_changed(sx, sy)
+                        || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
                         return;
                     }
                     let ingredient_i = this.ingredient_f(
-                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).type,
-                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).state
+                        inst.layer.item_sublayer.get_inst(sx, sy).type,
+                        inst.layer.item_sublayer.get_inst(sx, sy).state
                     )
                     if (ingredient_i === -1){
-                        if (inst.layer.time % 5 != 0){
-                            return;
-                        }
-                        let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
-                        let [tx, ty] = entity_dir_target(inst);
-                        if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
-                            inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                            inst.layer.set_item_changed(inst.x, inst.y, true);
-                        }
                         return;
                     }
                     inst.state.current_amounts[ingredient_i]++;
-                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                    inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(sx, sy, true);
                     if (this.check_fulfill(inst)){
                         inst.state.fulfilled = true;
                         let [tx, ty] = entity_dir_target(inst);
@@ -376,7 +374,7 @@
                     this.product_type_b = product_type_b;
                     this.product_state_b = product_state_b;
                 }
-                can_place_item_on(inst){return true;}
+                can_place_item_on(inst){return false;}
                 check_fulfill(inst){
                     if (inst.state.fulfilled){
                         return true;
@@ -394,29 +392,21 @@
                     return inst.state.dir === 0 || inst.state.dir === 3 ? 1 : 0;
                 }
                 tick(inst){
-                    if (inst.layer.get_item_changed(inst.x, inst.y)
-                        || inst.layer.item_sublayer.get_inst(inst.x, inst.y).type === item_table.get('empty')){
+                    let [sx, sy] = entity_dir_source(inst);
+                    if (inst.layer.get_item_changed(sx, sy)
+                        || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
                         return;
                     }
                     let ingredient_i = this.ingredient_f(
-                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).type,
-                        inst.layer.item_sublayer.get_inst(inst.x, inst.y).state
+                        inst.layer.item_sublayer.get_inst(sx, sy).type,
+                        inst.layer.item_sublayer.get_inst(sx, sy).state
                     )
                     if (ingredient_i === -1){
-                        if (inst.layer.time % 5 != 0){
-                            return;
-                        }
-                        let old_item_inst = inst.layer.item_sublayer.get_inst(inst.x, inst.y);
-                        let [tx, ty] = entity_dir_target(inst);
-                        if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
-                            inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                            inst.layer.set_item_changed(inst.x, inst.y, true);
-                        }
                         return;
                     }
                     inst.state.current_amounts[ingredient_i]++;
-                    inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
-                    inst.layer.set_item_changed(inst.x, inst.y, true);
+                    inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(sx, sy, true);
                     if (this.check_fulfill(inst)){
                         inst.state.fulfilled = true;
                         let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
@@ -907,7 +897,7 @@
                         - 分类器（按类别分物品）
                         每种传送带有三阶，快中慢，快是1刻，中是3刻，慢是5刻。
                     - 能量转化
-                        - 势能电池：抬升机消耗电转化成激发态，放电转化成基态（可以手动消耗饭激发）；村民消耗饭，将旁边的抬升机激发
+                        - 势能电池：抬升机消耗1电转化成激发态，放1电转化成基态（可以手动消耗饭激发）；村民消耗饭，将旁边的抬升机激发
                         - 热能发电：炉子将煤转化成火，蒸汽机将火转化成电；大棚将光转化成粮食，粮食在炉子转化成饭，饭在炉子转化成煤
                         - 太阳能电池：把光转化成火；LED灯把电转化成光
                         - 化学电池：电炉（消耗电把铁矿变铁）+ 原电池（把铁变铁矿，产生电）
@@ -937,6 +927,8 @@
                     - 将6个普通电变成中压电，将6个中压电变成高压电
                 - 机械齿轮组
                     - 将6个普通功变成中力功，将6个中力功变成大力功
+                - 重量传送带
+                    - 每个物品的重量是1，打包后重量变重，机器打包时
                 - （显卡（消耗电，产生算力）
                 - （手机（消耗电，产生网络数据包）
                 - （加密货币钱包（消耗算力和网络数据包，产生金钱）
