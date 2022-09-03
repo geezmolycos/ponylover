@@ -454,10 +454,14 @@
             class EmptyItem{
                 draw(inst){}
                 info(inst){}
+                as_crafting_ingredient(inst){
+                    return [inst.type, 1];
+                }
             }
 
-            class IconItem{
+            class IconItem extends EmptyItem{
                 constructor(icon){
+                    super();
                     this.icon = icon;
                 }
                 draw(inst){
@@ -802,14 +806,19 @@
                 for (let y=ground_crafting_region.ya; y<ground_crafting_region.yb; y++){
                     for (let x=ground_crafting_region.xa; x<ground_crafting_region.xb; x++){
                         let inst = ground_layer.next_item_sublayer.get_inst(x, y);
-                        if (need_count.has(inst.type)){
+                        let [recipe_type, recipe_amount] = inst.type.as_crafting_ingredient(inst);
+                        if (need_count.has(recipe_type)){
                             if (do_craft){
                                 ground_layer.next_item_sublayer.swap(x, y, item_table.get('empty'), null);
                                 ground_layer.set_item_changed(x, y, true);
                             }
-                            need_count.set(inst.type, need_count.get(inst.type) - 1);
-                            if (need_count.get(inst.type) == 0){
-                                need_count.delete(inst.type);
+                            let prev_amount = need_count.get(recipe_type);
+                            if (prev_amount - recipe_amount < 0){ // too many ingredients in one item
+                                continue;
+                            }
+                            need_count.set(recipe_type, prev_amount - recipe_amount);
+                            if (need_count.get(recipe_type) == 0){
+                                need_count.delete(recipe_type);
                                 if (need_count.size == 0){
                                     return need_count;
                                 }
@@ -826,7 +835,7 @@
                 if (hand_layer.next_entity_sublayer.get_inst(0, 0).type !== entity_table.get('empty')){
                     return {able: false};
                 }
-                if (can_craft(recipe.in)){
+                if (can_craft(recipe.in).size == 0){
                     can_craft(recipe.in, true);
                     let out_type = entity_table.get(recipe.out);
                     hand_layer.next_entity_sublayer.swap(0, 0, out_type, get_default_state(out_type));
@@ -881,28 +890,22 @@
             剧情：一个人特别爱六只马(pony)，这是他家的电表发生的变化……
                 为了穿越到六马的世界，他读了很多书，发现要扭曲空间，需要很多能量。因此他开始搭建生产线，产出能量。
             类factorio：
-                能量发展线：
-                    ->人力(要耗饭)/市电(需要付钱)（插口有限）
-                    ->村里大爷大妈人力(要耗饭)
-                    ->太阳能(一次投入的钱多，产出的少，但是后面免费)/火力发电(用煤炉子改的，要付煤费，可以顺便产出饭)
-                    ->自己采煤发电/地热发电
-                    ->核能发电（聚变发电）
-                    ->真空零点能发电
-                    ->宇宙际强相互力梯度差势发电（反向向里面传能量就可以完成游戏目标）
                 资源：
-                    粮食、饭、煤、铁矿、石、铀矿、水、重水
-                    铁、铀、铅
-                    反铁
-                    微虫洞
-                    火（炎、焱）光、电
-                    （废料（辣鸡）
-                    （智子
+                    - 固态：粮食、饭、煤、铁矿、石、铀矿
+                        铁、铀、铅
+                        反铁
+                    - 液态：
+                        水、重水
+                    - 气态：
+                        微虫洞
+                        火、光、电、功
                 机器：
                     - 物流
                         - 传送带（运送物品）
                         - 传送梯（跨层传送带）
                         - 路由器（随机分物品）
                         - 分类器（按类别分物品）
+                        每种传送带有三阶，快中慢，快是1刻，中是3刻，慢是5刻。
                     - 能量转化
                         - 势能电池：抬升机消耗电转化成激发态，放电转化成基态（可以手动消耗饭激发）；村民消耗饭，将旁边的抬升机激发
                         - 热能发电：炉子将煤转化成火，蒸汽机将火转化成电；大棚将光转化成粮食，粮食在炉子转化成饭，饭在炉子转化成煤
@@ -911,14 +914,9 @@
                         - 可逆核过程电池：核反应堆把铀变铅，放能，核子置入器把铅变铀，吸能
                         - 反物质电池：光子对撞机吸能产生铁和反铁，两者在约束反应器中产生能量
                         - 虫洞电池：时空界面消耗能量产生微虫洞，微虫洞在时空界面分解产生能量
-                    - （变压器：转换电压
+                    
                     - 电动车充电（消耗电，产生金钱）
-                    - （显卡（消耗电，产生算力）
-                    - （手机（消耗电，产生网络数据包）
-                    - （加密货币钱包（消耗算力和网络数据包，产生金钱）
                     - 电炉（冶炼矿物）
-                    - （银行（兑换钱的面额）
-                    - （研究科技，计算机消耗算力还有网络数据包（还有材料？），可以研究科技，刚开始不用计算机，是拿煤做书读书
                     - 钻头（挖矿）
                     - 水泵（挖水，提取重水）
                     - 机械能/齿轮放大做的功
@@ -930,6 +928,24 @@
                 世界场景：自己的家里面、院子（可以自由放东西的地图，有2层）/邻居、商店（只是可以交互的场景）/手（一格空间可以存物品）
                 有的属性：金钱（元）、饥饿值、时间（白天黑夜、星期）
                 剧情邻居人物：赵犰狳、钱蝙蝠、孙骆驼、李蜻蜓、...
+
+                DLC或更新：
+                - 压缩与解压
+                    - 打包机把6个（相同）资源压成包裹，装载机把6个包裹装成集装箱，卸载机和解包机相反
+                    - 不能处理气态物体
+                - 升压/降压器
+                    - 将6个普通电变成中压电，将6个中压电变成高压电
+                - 机械齿轮组
+                    - 将6个普通功变成中力功，将6个中力功变成大力功
+                - （显卡（消耗电，产生算力）
+                - （手机（消耗电，产生网络数据包）
+                - （加密货币钱包（消耗算力和网络数据包，产生金钱）
+                - （银行（兑换钱的面额）
+                - （研究科技，计算机消耗算力还有网络数据包（还有材料？），可以研究科技，刚开始不用计算机，是拿煤做书读书
+                - 资源
+                    （炎、焱）
+                    （废料（辣鸡）
+                    （智子
 
             写得很烂能乱玩就可以了，千万不要尝试抽象，写什么类
             */
