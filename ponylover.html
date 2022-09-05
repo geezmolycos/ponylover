@@ -27,6 +27,7 @@
                 box-sizing: border-box;
                 padding-top: var(--game-grid-border);
                 padding-left: var(--game-grid-border);
+                image-rendering: pixelated;
             }
             .grid-cont{
                 border-bottom: var(--game-grid-border) solid black;
@@ -127,11 +128,11 @@
                 draw(inst){
                     let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
                     return $('<div>')
-                        .css('background-image', `url('./belt.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%')
-                        .css('transform', `rotate(${rotation})`);
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('transform', `rotate(${rotation})`)
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){return '传送带'}
                 enum_states(){
@@ -171,10 +172,10 @@
                 }
                 draw(inst){
                     return $('<div>')
-                        .css('background-image', `url('./ladder.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%');
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){}
                 enum_states(){
@@ -216,11 +217,11 @@
                 draw(inst){
                     let rotation = ['0deg', '90deg'][inst.state.hv];
                     return $('<div>')
-                        .css('background-image', `url('./router.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%')
-                        .css('transform', `rotate(${rotation})`);
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('transform', `rotate(${rotation})`)
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){}
                 enum_states(){
@@ -278,11 +279,11 @@
                 draw(inst){
                     let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
                     return $('<div>')
-                        .css('background-image', `url('./filter.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%')
-                        .css('transform', `rotate(${rotation})`);
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('transform', `rotate(${rotation})`)
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){}
                 enum_states(){
@@ -298,12 +299,14 @@
 
 
             class MachineEnt extends EmptyEnt{
-                constructor(ingredient_f, amounts, product_type, product_state){
+                constructor(ingredient_f, amounts, product_type, product_state, product_amount, cooldown_ticks){
                     super();
                     this.ingredient_f = ingredient_f;
                     this.amounts = amounts;
                     this.product_type = product_type;
                     this.product_state = product_state;
+                    this.product_amount = product_amount;
+                    this.cooldown_ticks = cooldown_ticks;
                 }
                 can_place_item_on(inst){return false;}
                 check_fulfill(inst){
@@ -320,6 +323,20 @@
                     return fulfilled;
                 }
                 tick(inst){
+                    if (inst.state.remaining_output > 0){
+                        let [tx, ty] = entity_dir_target(inst);
+                        if (entity_output_item(inst, tx, ty, this.product_type, this.product_state)){
+                            inst.state.remaining_output--;
+                            if (inst.state.remaining_output == 0){
+                                this.init_other_states(inst.state);
+                            }
+                        }
+                        return;
+                    }
+                    if (inst.state.cooldown_ticks > 0){
+                        inst.state.cooldown_ticks--;
+                        return;
+                    }
                     let [sx, sy] = entity_dir_source(inst);
                     if (inst.layer.get_item_changed(sx, sy)
                         || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
@@ -337,20 +354,18 @@
                     inst.layer.set_item_changed(sx, sy, true);
                     if (this.check_fulfill(inst)){
                         inst.state.fulfilled = true;
-                        let [tx, ty] = entity_dir_target(inst);
-                        if (entity_output_item(inst, tx, ty, this.product_type, this.product_state)){
-                            this.init_other_states(inst.state);
-                        }
+                        inst.state.remaining_output = this.product_amount;
+                        inst.state.cooldown_ticks = this.cooldown_ticks;
                     }
                 }
                 draw(inst){
                     let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
                     return $('<div>')
-                        .css('background-image', `url('./gen.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%')
-                        .css('transform', `rotate(${rotation})`);
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('transform', `rotate(${rotation})`)
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){}
                 enum_states(){
@@ -360,19 +375,23 @@
                 }
                 init_other_states(state){
                     state.fulfilled = false;
+                    state.remaining_output = 0;
                     state.current_amounts = new Array(this.amounts.length).fill(0);
+                    state.cooldown_ticks = 0;
                 }
             }
 
             class TwoOutputMachineEnt extends EmptyEnt{
-                constructor(ingredient_f, amounts, product_type_a, product_state_a, product_type_b, product_state_b){
+                constructor(ingredient_f, amounts, product_type_a, product_state_a, product_amount_a, product_type_b, product_state_b, product_amount_b){
                     super();
                     this.ingredient_f = ingredient_f;
                     this.amounts = amounts;
                     this.product_type_a = product_type_a;
                     this.product_state_a = product_state_a;
+                    this.product_amount_a = product_amount_a;
                     this.product_type_b = product_type_b;
                     this.product_state_b = product_state_b;
+                    this.product_amount_b = product_amount_b;
                 }
                 can_place_item_on(inst){return false;}
                 check_fulfill(inst){
@@ -392,6 +411,37 @@
                     return inst.state.dir === 0 || inst.state.dir === 3 ? 1 : 0;
                 }
                 tick(inst){
+                    if (inst.state.remaining_output_a > 0 || inst.state.remaining_output_b > 0){
+                        let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
+                        if (this.hv(inst) === 0){
+                            txa--; txb++;
+                        } else {
+                            tya--; tyb++;
+                        }
+                        if (inst.state.remaining_output_a > 0){
+                            if (entity_output_item(inst, txa, tya, this.product_type_a, this.product_state_a)){
+                                inst.state.remaining_output_a--;
+                                if (inst.state.remaining_output_a == 0 && inst.state.remaining_output_b == 0){
+                                    this.init_other_states(inst.state);
+                                }
+                            }
+                        }
+                        if (inst.state.remaining_output_b > 0){
+                            if (entity_output_item(inst, txb, tyb, this.product_type_b, this.product_state_b)){
+                                inst.state.remaining_output_a--;
+                                if (inst.state.remaining_output_a == 0 && inst.state.remaining_output_b == 0){
+                                    this.init_other_states(inst.state);
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    if (inst.state.cooldown_ticks > 0){
+                        inst.state.cooldown_ticks--;
+                        return;
+                    }
+                    
                     let [sx, sy] = entity_dir_source(inst);
                     if (inst.layer.get_item_changed(sx, sy)
                         || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
@@ -409,28 +459,19 @@
                     inst.layer.set_item_changed(sx, sy, true);
                     if (this.check_fulfill(inst)){
                         inst.state.fulfilled = true;
-                        let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
-                        if (this.hv(inst) === 0){
-                            txa--; txb++;
-                        } else {
-                            tya--; tyb++;
-                        }
-                        if (entity_output_two_items(inst, txa, tya, txb, tyb,
-                            this.product_type_a, this.product_state_a,
-                            this.product_type_b, this.product_state_b)
-                            ){
-                            this.init_other_states(inst.state);
-                        }
+                        inst.state.remaining_output_a = this.product_amount_a;
+                        inst.state.remaining_output_b = this.product_amount_b;
+                        inst.state.cooldown_ticks = this.cooldown_ticks;
                     }
                 }
                 draw(inst){
                     let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
                     return $('<div>')
-                        .css('background-image', `url('./gen.png')`)
-                        .css('background-size', '100% 100%')
-                        .css('width', '100%')
-                        .css('height', '100%')
-                        .css('transform', `rotate(${rotation})`);
+                        .css('background-image', `url('${this.icon}')`)
+                        .css('background-size', '512px 512px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('transform', `rotate(${rotation})`)
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
                 info(inst){}
                 enum_states(){
@@ -438,7 +479,13 @@
                         ['dir', [0,1,2,3]],
                     ];
                 }
-                init_other_states(state){}
+                init_other_states(state){
+                    state.fulfilled = false;
+                    state.remaining_output_a = 0;
+                    state.remaining_output_b = 0;
+                    state.current_amounts = new Array(this.amounts.length).fill(0);
+                    state.cooldown_ticks = 0;
+                }
             }
 
             class EmptyItem{
@@ -450,14 +497,17 @@
             }
 
             class IconItem extends EmptyItem{
-                constructor(icon){
+                constructor(icon, pos_x, pos_y){
                     super();
                     this.icon = icon;
+                    this.pos_x = pos_x;
+                    this.pos_y = pos_y;
                 }
                 draw(inst){
                     return $('<div>')
                         .css('background-image', `url('${this.icon}')`)
-                        .css('background-size', '100% 100%')
+                        .css('background-size', '512px 512px')
+                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`)
                         .css('width', '100%').css('height', '100%');
                 }
                 info(inst){}
@@ -465,17 +515,33 @@
 
             let item_table = new Map([
                 ['empty', new EmptyItem()],
-                ['iron', new IconItem("./iron.png")],
-                ['elec', new IconItem("./elec.png")],
+                ['crop', new IconItem("./texture.png", 0, 0)],
+                ['food', new IconItem("./texture.png", 1, 0)],
+                ['coal', new IconItem("./texture.png", 2, 0)],
+                ['iron_ore', new IconItem("./texture.png", 3, 0)],
+                ['uran_ore', new IconItem("./texture.png", 4, 0)],
+                ['iron_ingot', new IconItem("./texture.png", 3, 1)],
+                ['uran_ingot', new IconItem("./texture.png", 4, 1)],
+                ['anti_iron_ingot', new IconItem("./texture.png", 3, 2)],
+                ['lead_ingot', new IconItem("./texture.png", 4, 2)],
+                ['fire', new IconItem("./texture.png", 0, 4)],
+                ['light', new IconItem("./texture.png", 1, 4)],
+                ['elec', new IconItem("./texture.png", 2, 4)],
+                ['wormhole', new IconItem("./texture.png", 4, 4)],
             ]);
 
             let entity_table = new Map([
                 ['empty', new EmptyEnt()],
-                ['belt', new BeltEnt(5)],
-                ['ladder', new LadderEnt(5)],
-                ['router', new RouterEnt(5)],
-                ['filter', new FilterEnt(5)],
-                ['gen', new MachineEnt((type, state)=>(type === item_table.get('iron') ? 0 : -1), [3], item_table.get('elec'), null)],
+                ['belt', (()=>{let e = new BeltEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=6; return e})()],
+                ['fast_belt', (()=>{let e = new BeltEnt(3); e.icon='./texture.png'; e.pos_x=1; e.pos_y=6; return e})()],
+                ['faster_belt', (()=>{let e = new BeltEnt(1); e.icon='./texture.png'; e.pos_x=2; e.pos_y=6; return e})()],
+                ['ladder', (()=>{let e = new LadderEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=7; return e})()],
+                ['router', (()=>{let e = new RouterEnt(5); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7; return e})()],
+                ['filter', (()=>{let e = new FilterEnt(5); e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e})()],
+                ['gravity_gen', (()=>{
+                    let e = new MachineEnt((type, state)=>(-1), [1], item_table.get('elec'), null, 6, 100);
+                    e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e
+                })()],
             ]);
 
             class YardSubLayer{
@@ -839,12 +905,12 @@
             crafting_layer.draw_all($crafting_cont);
 
 
-            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('iron'), null);
-            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('iron_ingot'), null);
+            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('iron_ingot'), null);
             ground_layer.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
-            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('iron'), null);
-            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('iron'), null);
-            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('iron'), null);
+            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('iron_ingot'), null);
+            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('iron_ingot'), null);
+            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('iron_ingot'), null);
             ground_layer.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
@@ -852,7 +918,7 @@
             ground_layer.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
             ground_layer.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
             ground_layer.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('gen'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('gravity_gen'), {dir: 2});
             let bi = ground_layer.next_entity_sublayer.get_inst(3, 2)
             bi.type.init_other_states(bi.state);
             ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
@@ -889,10 +955,10 @@
                         火、光、电
                 机器：
                     - 物流
-                        - 传送带（运送物品）
-                        - 传送梯（跨层传送带）
-                        - 路由器（随机分物品）
-                        - 分类器（按类别分物品）
+                        - （6铁/12铁6煤/24铁1铅）传送带（运送物品）
+                        - （24铁）传送梯（跨层传送带）
+                        - （12铁）路由器（随机分物品）
+                        - （12铁）分类器（按类别分物品）
                         每种传送带有三阶，快中慢，快是1刻，中是3刻，慢是5刻。
                     - 能量转化
                         - 势能电池（50%效率）：抬升机放6电转化成基态（可以手动消耗饭激发）；村民消耗1饭，将旁边（4邻居）的抬升机激发1个(冷却时间约5s)
@@ -904,7 +970,7 @@
                         - 虫洞电池：时空界面消耗1728电和1728光产生微虫洞，微虫洞在反时空界面分解产生1728电和1680火
 
                     - 电动车充电（消耗6电，产生1圆钱，冷却6s）
-                    - 钻头（挖矿）取决于位置，挖出铁矿、煤（1次挖24个）或铀。消耗6电挖一格。铀是消耗6电和12铁
+                    - 钻头（挖矿）取决于位置，挖出铁矿、煤（1次挖24个）或1铀。消耗6电挖一格。铀是消耗6电和12铁
                     - 电炉（冶炼矿物）消耗24电把1铁矿变24铁，消耗24电把1铀矿变24铀
                     - 反物质增殖装置：24反铁和6铅，75%概率变25反铁，25%概率变24反铁
                     - 宇宙际强力浓差虫洞增殖装置：12微虫洞和3反铁，75%概率变13微虫洞，25%概率变12微虫洞
