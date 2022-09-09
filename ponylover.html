@@ -79,6 +79,12 @@
             }
 
             function entity_output_item(inst, tx, ty, item_type, item_state){
+                if (item_type == item_table.get('empty')){
+                    return true;
+                }
+                if (item_type == null){
+                    return false;
+                }
                 if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
                     || inst.layer.get_item_changed(tx, ty)
                     || !inst.layer.can_place_item_on(tx, ty)){
@@ -86,21 +92,6 @@
                 }
                 inst.layer.next_item_sublayer.swap(tx, ty, item_type, item_state);
                 inst.layer.set_item_changed(tx, ty, true);
-                return true;
-            }
-
-            function entity_output_two_items(inst, txa, tya, txb, tyb, item_type_a, item_state_a, item_type_b, item_state_b){
-                for (let [tx, ty] of [[txa, tya], [txb, tyb]]){
-                    if (inst.layer.item_sublayer.get_inst(tx, ty).type !== item_table.get('empty')
-                        || inst.layer.get_item_changed(tx, ty)
-                        || !inst.layer.can_place_item_on(tx, ty)){
-                        return false;
-                    }
-                }
-                inst.layer.next_item_sublayer.swap(txa, tya, item_type_a, item_state_a);
-                inst.layer.set_item_changed(txa, tya, true);
-                inst.layer.next_item_sublayer.swap(txb, tyb, item_type_b, item_state_b);
-                inst.layer.set_item_changed(txb, tyb, true);
                 return true;
             }
 
@@ -322,19 +313,30 @@
                     });
                     return fulfilled;
                 }
+                set_fulfill(inst){
+                    inst.state.fulfilled = true;
+                    inst.state.remaining_output = this.product_amount;
+                    inst.state.cooldown_ticks = this.cooldown_ticks;
+                }
                 tick(inst){
                     if (inst.state.remaining_output > 0){
+                        if (inst.state.cooldown_ticks > 0){
+                            inst.state.cooldown_ticks--;
+                            return;
+                        }
+                        let [out_type, out_state] = [item_table.get('empty'), null];
+                        if (this.on_output_item){
+                            [out_type, out_state] = this.on_output_item(inst);
+                        } else {
+                            [out_type, out_state] = [this.product_type, this.product_state];
+                        }
                         let [tx, ty] = entity_dir_target(inst);
-                        if (entity_output_item(inst, tx, ty, this.product_type, this.product_state)){
+                        if (entity_output_item(inst, tx, ty, out_type, out_state)){
                             inst.state.remaining_output--;
                             if (inst.state.remaining_output == 0){
                                 this.init_other_states(inst.state);
                             }
                         }
-                        return;
-                    }
-                    if (inst.state.cooldown_ticks > 0){
-                        inst.state.cooldown_ticks--;
                         return;
                     }
                     let [sx, sy] = entity_dir_source(inst);
@@ -350,12 +352,13 @@
                         return;
                     }
                     inst.state.current_amounts[ingredient_i]++;
-                    inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
+                    let [type, state] = inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
                     inst.layer.set_item_changed(sx, sy, true);
+                    if (this.on_input_item){
+                        this.on_input_item(inst, type, state);
+                    }
                     if (this.check_fulfill(inst)){
-                        inst.state.fulfilled = true;
-                        inst.state.remaining_output = this.product_amount;
-                        inst.state.cooldown_ticks = this.cooldown_ticks;
+                        this.set_fulfill(inst);
                     }
                 }
                 draw(inst){
@@ -377,7 +380,9 @@
                     state.fulfilled = false;
                     state.remaining_output = 0;
                     state.current_amounts = new Array(this.amounts.length).fill(0);
-                    state.cooldown_ticks = 0;
+                    if (!state.cooldown_ticks){
+                        state.cooldown_ticks = 0;
+                    }
                 }
             }
 
@@ -412,6 +417,10 @@
                 }
                 tick(inst){
                     if (inst.state.remaining_output_a > 0 || inst.state.remaining_output_b > 0){
+                        if (inst.state.cooldown_ticks > 0){
+                            inst.state.cooldown_ticks--;
+                            return;
+                        }
                         let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
                         if (this.hv(inst) === 0){
                             txa--; txb++;
@@ -428,7 +437,7 @@
                         }
                         if (inst.state.remaining_output_b > 0){
                             if (entity_output_item(inst, txb, tyb, this.product_type_b, this.product_state_b)){
-                                inst.state.remaining_output_a--;
+                                inst.state.remaining_output_b--;
                                 if (inst.state.remaining_output_a == 0 && inst.state.remaining_output_b == 0){
                                     this.init_other_states(inst.state);
                                 }
@@ -437,11 +446,6 @@
                         return;
                     }
 
-                    if (inst.state.cooldown_ticks > 0){
-                        inst.state.cooldown_ticks--;
-                        return;
-                    }
-                    
                     let [sx, sy] = entity_dir_source(inst);
                     if (inst.layer.get_item_changed(sx, sy)
                         || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
@@ -484,7 +488,9 @@
                     state.remaining_output_a = 0;
                     state.remaining_output_b = 0;
                     state.current_amounts = new Array(this.amounts.length).fill(0);
-                    state.cooldown_ticks = 0;
+                    if (!state.cooldown_ticks){
+                        state.cooldown_ticks = 0;
+                    }
                 }
             }
 
@@ -524,7 +530,7 @@
                 ['uran_ingot', new IconItem("./texture.png", 4, 1)],
                 ['anti_iron_ingot', new IconItem("./texture.png", 3, 2)],
                 ['lead_ingot', new IconItem("./texture.png", 4, 2)],
-                ['fire', new IconItem("./texture.png", 0, 4)],
+                ['fire', (()=>{let e = new IconItem("./texture.png", 0, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
                 ['light', new IconItem("./texture.png", 1, 4)],
                 ['elec', new IconItem("./texture.png", 2, 4)],
                 ['wormhole', new IconItem("./texture.png", 4, 4)],
@@ -539,8 +545,68 @@
                 ['router', (()=>{let e = new RouterEnt(5); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7; return e})()],
                 ['filter', (()=>{let e = new FilterEnt(5); e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e})()],
                 ['gravity_gen', (()=>{
-                    let e = new MachineEnt((type, state)=>(-1), [1], item_table.get('elec'), null, 6, 100);
-                    e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e
+                    let e = new MachineEnt((type, state)=>(-1), [1], item_table.get('elec'), null, 6, 50);
+                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=9; return e
+                })()],
+                ['villager', (()=>{
+                    let e = new MachineEnt(
+                        (type, state)=>(type == item_table.get('food') ? 0 : -1),
+                        [1], item_table.get('empty'), null, 1, 100
+                    );
+                    e.on_output_item = (inst) => {
+                        let gravity_gen_txy = [];
+                        for (let dir = 0; dir < 4; dir++){
+                            let [dx, dy] = cardinal[dir];
+                            let [tx, ty] = [inst.x + dx, inst.y + dy];
+                            if (inst.layer.get_entity_changed(tx, ty)){
+                                continue;
+                            }
+                            if (inst.layer.entity_sublayer.get_inst(tx, ty).type == entity_table.get('gravity_gen')){
+                                gravity_gen_txy.push([tx, ty]);
+                            }
+                        }
+                        let target_gravity_gen_i = Math.floor(Math.random() * gravity_gen_txy.length);
+                        let [tx, ty] = gravity_gen_txy[target_gravity_gen_i];
+                        let gen_inst = inst.layer.next_entity_sublayer.get_inst(tx, ty);
+                        if (gen_inst.type.check_fulfill(gen_inst)){
+                            return [null, null];
+                        }
+                        gen_inst.type.set_fulfill(gen_inst);
+                        return [item_table.get('empty'), null];
+                    }
+                    e.icon='./texture.png'; e.pos_x=2; e.pos_y=9; return e
+                })()],
+                ['stove', (()=>{
+                    let e = new MachineEnt(
+                        (type, state)=>((type == item_table.get('coal') || type == item_table.get('crop') || type == item_table.get('food')) ? 0 : -1),
+                        [1], item_table.get('empty'), null, 1, 100
+                    );
+                    e.on_input_item = (inst, type, state)=>{
+                        if (type == item_table.get('coal')){
+                            inst.state.recipe = 'coal';
+                        } else if (type == item_table.get('crop')){
+                            inst.state.recipe = 'crop';
+                        } else if (type == item_table.get('food')){
+                            inst.state.recipe = 'food';
+                        }
+                        inst.state.coal_output_amount_init = false;
+                    }
+                    e.on_output_item = (inst) => {
+                        if (inst.state.recipe == 'coal'){
+                            if (!inst.state.coal_output_amount_init){
+                                inst.state.coal_output_amount_init = true;
+                                inst.state.remaining_output = 9;
+                            }
+                            return [item_table.get('fire'), null];
+                        } else if (inst.state.recipe == 'crop'){
+                            return [item_table.get('food'), null];
+                        } else if (inst.state.recipe == 'food'){
+                            return [item_table.get('coal'), null];
+                        } else {
+                            return [item_table.get('empty'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=3; e.pos_y=9; return e
                 })()],
             ]);
 
@@ -661,6 +727,28 @@
                 }
 
                 tick_all(){
+                    // process item life
+                    for (let y=0; y<this.height; y++){
+                        for (let x=0; x<this.width; x++){
+                            let item_inst = this.item_sublayer.get_inst(x, y);
+                            if (item_inst.type.life !== undefined){
+                                if (item_inst.state === null){
+                                    this.next_item_sublayer.swap(x, y, item_inst.type, {life: item_inst.type.life(item_inst)});
+                                    this.set_item_changed(x, y, true);
+                                } else if (item_inst.state.life === undefined){
+                                    item_inst.state.life = item_inst.type.life(item_inst);
+                                } else if (item_inst.state.life > 0){
+                                    item_inst.state.life--;
+                                } else if (item_inst.state.life == 0){
+                                    if (Math.random() < item_inst.type.kill_prob(item_inst)){
+                                        this.next_item_sublayer.swap(x, y, item_table.get('empty'), null);
+                                        this.set_item_changed(x, y, true);
+                                    }
+                                }
+                                
+                            }
+                        }
+                    }
                     if (this.do_tick_reversed()){
                         for (let y=0; y<this.height; y++){
                             for (let x=0; x<this.width; x++){
@@ -905,12 +993,12 @@
             crafting_layer.draw_all($crafting_cont);
 
 
-            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('iron_ingot'), null);
-            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('iron_ingot'), null);
-            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('elec'), null);
-            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('iron_ingot'), null);
-            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('iron_ingot'), null);
-            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('iron_ingot'), null);
+            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('coal'), null);
+            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('food'), null);
+            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('food'), null);
+            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('food'), null);
+            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('coal'), null);
+            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('coal'), null);
             ground_layer.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
@@ -918,10 +1006,12 @@
             ground_layer.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
             ground_layer.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
             ground_layer.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('gravity_gen'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('villager'), {dir: 2});
             let bi = ground_layer.next_entity_sublayer.get_inst(3, 2)
             bi.type.init_other_states(bi.state);
-            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('gravity_gen'), {dir: 3});
+            let bi1 = ground_layer.next_entity_sublayer.get_inst(4, 2)
+            bi1.type.init_other_states(bi1.state);
             ground_layer.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(4, 4, entity_table.get('ladder'));
             ground_layer.next_entity_sublayer.swap(5, 4, entity_table.get('router'), {hv: 0});
