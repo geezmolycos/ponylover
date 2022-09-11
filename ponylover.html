@@ -554,6 +554,7 @@
                 ['light', (()=>{let e = new IconItem("./texture.png", 1, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
                 ['elec', (()=>{let e = new IconItem("./texture.png", 2, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
                 ['wormhole', new IconItem("./texture.png", 4, 4)],
+                ['coin', new IconItem("./texture.png", 0, 5)],
             ]);
 
             let entity_table = new Map([
@@ -667,6 +668,17 @@
                     }
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
                 })()],
+                ['uran_furnace', (()=>{
+                    let e = new MachineEnt(null, [1, 24], item_table.get('uran_ingot'), null, 24, 100);
+                    e.on_input_item = (inst, type, state) => {
+                        if (inst.state.current_amounts[0] === 0){
+                            return type === item_table.get('uran_ore') ? 0 : -1;
+                        } else {
+                            return type === item_table.get('elec') ? 1 : -1;
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
+                })()],
                 ['battery', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('iron_ingot') ? 0 : -1), [24], item_table.get('empty'), null, 21, 100);
                     e.on_output_item = (inst) => {
@@ -736,6 +748,81 @@
                         }
                     }
                     e.icon='./texture.png'; e.pos_x=7; e.pos_y=10; return e
+                })()],
+                ['coin_maker', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [6], item_table.get('coin'), null, 1, 120);
+                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=11; return e
+                })()],
+                ['drill', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [6], item_table.get('empty'), null, 24, 120);
+                    e.mine = (inst) => {
+                        let hash = (53 + inst.y * 101) * 53 + inst.x * 101;
+                        let m = hash % 32;
+                        if (m < 10){
+                            return 'coal';
+                        } else {
+                            return 'iron';
+                        }
+                    }
+                    e.on_output_item = (inst) => {
+                        let recipe = e.mine(inst);
+                        if (recipe == 'coal'){
+                            return [item_table.get('coal'), null];
+                        } else if (recipe == 'iron'){
+                            if (inst.remaining_output[0] < 24){
+                                return [null, null];
+                            } else {
+                                return [item_table.get('iron_ore'), null];
+                            }
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
+                })()],
+                ['uran_drill', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('empty'), null, 24, 120);
+                    e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
+                })()],
+                ['antimatter_enricher', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('anti_iron_ingot') ? 0 : (type == item_table.get('lead_ingot') ? 1 : -1)), [24, 6], item_table.get('empty'), null, 25, 100);
+                    e.on_output_item = (inst) => {
+                        if (inst.state.remaining_output == 1){
+                            if (Math.random() < 0.75){
+                                return [item_table.get('anti_iron_ingot'), null];
+                            } else {
+                                return [null, null];
+                            }
+                        } else {
+                            return [item_table.get('anti_iron_ingot'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=2; e.pos_y=11; return e
+                })()],
+                ['wormhole_enricher', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('wormhole') ? 0 : (type == item_table.get('anti_iron_ingot') ? 1 : -1)), [12, 3], item_table.get('empty'), null, 13, 100);
+                    e.on_output_item = (inst) => {
+                        if (inst.state.remaining_output == 1){
+                            if (Math.random() < 0.75){
+                                return [item_table.get('wormhole'), null];
+                            } else {
+                                return [null, null];
+                            }
+                        } else {
+                            return [item_table.get('wormhole'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=3; e.pos_y=11; return e
+                })()],
+                ['store_food', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [2], item_table.get('food'), null, 1, 100);
+                    e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
+                })()],
+                ['store_coal', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('coal'), null, 1, 100);
+                    e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
+                })()],
+                ['store_iron', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('iron'), null, 1, 100);
+                    e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
             ]);
 
@@ -1029,13 +1116,40 @@
             }
             redraw_hand_and_selector();
 
-            let crafting_layer = new YardLayer(8, 4);
+            let crafting_layer = new YardLayer(8, 8);
 
             let crafting_recipes = [
-                {
-                    in: [['elec', 1]],
-                    out: 'belt'
-                }
+                {out: 'belt' ,in: [['iron_ingot', 6]]},
+                {out: 'fast_belt' ,in: [['iron_ingot', 12], ['coal', 6]]},
+                {out: 'faster_belt' ,in: [['iron_ingot', 24], ['lead_ingot', 1]]},
+                {out: 'ladder' ,in: [['iron_ingot', 24]]},
+                {out: 'router' ,in: [['iron_ingot', 12]]},
+                {out: 'filter' ,in: [['iron_ingot', 12]]},
+                {out: 'gravity_gen' ,in: [['iron_ingot', 24], ['coal', 12]]},
+                {out: 'villager' ,in: [['coal', 12], ['food', 12]]},
+                {out: 'stove' ,in: [['iron_ingot', 24], ['coal', 12]]},
+                {out: 'steam_gen' ,in: [['iron_ingot', 24]]},
+                {out: 'farm' ,in: [['food', 12]]},
+                {out: 'magnifier' ,in: [['iron_ingot', 6], ['coal', 3]]},
+                {out: 'lightbulb' ,in: [['iron_ingot', 6], ['coal', 3]]},
+                {out: 'led' ,in: [['iron_ingot', 6], ['coal', 3], ['lead', 2]]},
+                {out: 'elec_furnace' ,in: [['iron_ingot', 24], ['coal', 12]]},
+                {out: 'uran_furnace' ,in: [['iron_ingot', 24], ['coal', 12]]},
+                {out: 'battery' ,in: [['coal', 24]]},
+                {out: 'nuclear_reactor' ,in: [['iron_ingot', 96], ['coal', 96], ['uran_ingot', 4]]},
+                {out: 'nuclear_antireactor' ,in: [['iron_ingot', 96], ['coal', 96], ['uran_ingot', 4]]},
+                {out: 'anitimatter_gen' ,in: [['iron_ingot', 144], ['coal', 144], ['uran_ingot', 12]]},
+                {out: 'anitimatter_reactor' ,in: [['iron_ingot', 144], ['coal', 144], ['uran_ingot', 12]]},
+                {out: 'wormhole_gen' ,in: [['iron_ingot', 144], ['coal', 144], ['uran_ingot', 12], ['anti_iron_ingot', 12]]},
+                {out: 'wormhole_reactor' ,in: [['iron_ingot', 144], ['coal', 144], ['uran_ingot', 12], ['anti_iron_ingot', 12]]},
+                {out: 'coin_maker' ,in: [['iron_ingot', 12], ['coal', 12]]},
+                {out: 'drill' ,in: [['iron_ingot', 24]]},
+                {out: 'uran_drill' ,in: [['iron_ingot', 24]]},
+                {out: 'antimatter_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead', 12], ['anti_iron_ingot', 4]]},
+                {out: 'wormhole_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead', 12], ['wormhole', 4]]},
+                {out: 'store_food' ,in: [['iron_ingot', 6]]},
+                {out: 'store_coal' ,in: [['iron_ingot', 6]]},
+                {out: 'store_iron' ,in: [['iron_ingot', 6]]},
             ];
             let debug_crafting = true;
             if (debug_crafting){
