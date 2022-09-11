@@ -42,8 +42,114 @@
                 padding-left: 0px;
             }
         </style>
+        <style>
+            /* main ui frame styles */
+
+            #game-center {
+                text-align: center;
+            }
+
+            #game-cont {
+                border: 2px dashed black;
+                box-sizing: border-box;
+                display: inline-block;
+                text-align: initial;
+            }
+
+            #title-cont, #main-cont {
+                display: block;
+            }
+
+            #title-cont {
+                text-align: center;
+                font-size: larger;
+            }
+
+            #yard-cont, #op-cont, #handinfo-cont{
+                display: inline-block;
+                vertical-align: top;
+            }
+
+            #yard-cont {
+                width: calc(var(--game-grid-size) * 12 + var(--game-grid-border));
+                height: calc(var(--game-grid-size) * 8 + var(--game-grid-border));
+                overflow: hidden;
+            }
+
+            #op-cont {
+                width: calc(var(--game-grid-size) * 8 + var(--game-grid-border));
+            }
+
+            #handinfo-cont {
+                width: calc(var(--game-grid-size) * 4 + var(--game-grid-border));
+            }
+
+            #crafting-cont {
+                margin-top: calc(var(--game-grid-size) - var(--game-grid-border));
+            }
+
+            .ground-layer-cont,  .underground-layer-cont {
+                position: absolute;
+            }
+
+            .ground-layer-cont .grid-cont{
+                border-bottom: var(--game-grid-border) solid gray;
+                border-right: var(--game-grid-border) solid gray;
+            }
+            .ground-layer-cont .grid-cont .cell-wrapper{
+                border-top: var(--game-grid-border) solid gray;
+                border-left: var(--game-grid-border) solid gray;
+            }
+
+            .underground-layer-cont .grid-cont{
+                border-bottom: var(--game-grid-border) solid rgb(156, 90, 24);
+                border-right: var(--game-grid-border) solid rgb(156, 90, 24);
+            }
+            .underground-layer-cont .grid-cont .cell-wrapper{
+                border-top: var(--game-grid-border) solid rgb(156, 90, 24);
+                border-left: var(--game-grid-border) solid rgb(156, 90, 24);
+            }
+
+            #hand-cont, .game-button {
+                display: inline-block;
+                vertical-align: bottom;
+            }
+
+            .game-button{
+                display: inline-block;
+                border: 2px solid black;
+            }
+
+            #main-cont {
+                position: relative;
+            }
+
+            #control-cont {
+                position: absolute;
+                bottom: 0;
+            }
+
+        </style>
     </head>
     <body>
+        <div id="game-center">
+            <div id="game-cont">
+                <div id="title-cont">꒰ა ♡爱我的六色马可以做什么事♡ ໒꒱</div>
+                <div id="main-cont">
+                    <div id="yard-cont"></div>
+                    <div id="handinfo-cont">
+                        <div><span id="hand-cont"></span></div>
+                        <div id="info-cont"></div>
+                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button></div>
+                    </div>
+                    <div id="op-cont">
+                        <div id="state-selector-cont"></div>
+                        <div id="crafting-cont"></div>
+                    </div>
+                </div>
+                <div id="footer-cont"></div>
+            </div>
+        </div>
         <div>
             <button id="advance">advance</button>
             <button id="stop">stop</button>
@@ -779,7 +885,7 @@
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['uran_drill', (()=>{
-                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('empty'), null, 24, 120);
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('empty'), null, 24, 480);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['antimatter_enricher', (()=>{
@@ -1028,8 +1134,8 @@
                 }
             }
         
-            let ground_layer = new YardLayer(10, 5);
-            let underground_layer = new YardLayer(10, 5);
+            let ground_layer = new YardLayer(12, 8);
+            let underground_layer = new YardLayer(12, 8);
             ground_layer.ladder_layer = underground_layer;
             underground_layer.ladder_layer = ground_layer;
 
@@ -1048,10 +1154,10 @@
                 };
             }
             
-            let $layer_cont = ground_layer.make_cont();
-            let $underground_layer_cont = underground_layer.make_cont();
-            $('body').append($layer_cont);
-            $('body').append($underground_layer_cont);
+            let $layer_cont = ground_layer.make_cont().addClass('ground-layer-cont');
+            let $underground_layer_cont = underground_layer.make_cont().addClass('underground-layer-cont');
+            $('#yard-cont').append($layer_cont);
+            $('#yard-cont').append($underground_layer_cont);
 
             let hand_layer = new YardLayer(1, 1);
             hand_layer.get_entity_inst = function(){
@@ -1061,18 +1167,18 @@
                 return this.next_item_sublayer.get_inst(0, 0);
             }
             let $hand_layer_cont = hand_layer.make_cont();
-            $('body').append($hand_layer_cont);
+            $('#hand-cont').append($hand_layer_cont);
             ground_layer.hand_layer = hand_layer;
             underground_layer.hand_layer = hand_layer;
 
             let $state_selector_cont = $('<div>').addClass('state-selector-cont');
-            $state_selector_cont.append($('<div>').addClass('item-info'));
-            $state_selector_cont.append($('<div>').addClass('item-debug-state'));
+            $('#info-cont').append($('<div>').addClass('item-info'));
+            $('#info-cont').append($('<div>').addClass('item-debug-state'));
             $state_selector_cont.append($('<div>').addClass('state-enum'));
-            let selector_layer = new YardLayer(8, 3);
+            let selector_layer = new YardLayer(8, 2);
             let $selector_layer_cont = selector_layer.make_cont();
             $state_selector_cont.children('.state-enum').append($selector_layer_cont);
-            $('body').append($state_selector_cont);
+            $('#state-selector-cont').append($state_selector_cont);
 
             selector_layer.on_mouse_place_entity = (inst)=>{
                 if (inst.type === entity_table.get('empty')){
@@ -1091,10 +1197,10 @@
                 hand_layer.draw_all($hand_layer_cont);
                 let entity_inst = hand_layer.get_entity_inst();
                 let info = entity_inst.type.info(entity_inst);
-                $state_selector_cont.children('.item-info').empty();
-                $state_selector_cont.children('.item-info').append(info);
-                $state_selector_cont.children('.item-debug-state').empty();
-                $state_selector_cont.children('.item-debug-state').append(JSON.stringify(entity_inst.state));
+                $('.item-info').empty();
+                $('.item-info').append(info);
+                $('.item-debug-state').empty();
+                $('.item-debug-state').append(JSON.stringify(entity_inst.state));
                 let enum_states = entity_inst.type.enum_states();
                 let x=0, y=0;
                 selector_layer.next_entity_sublayer.empty(entity_table.get('empty'));
@@ -1116,7 +1222,7 @@
             }
             redraw_hand_and_selector();
 
-            let crafting_layer = new YardLayer(8, 8);
+            let crafting_layer = new YardLayer(8, 5);
 
             let crafting_recipes = [
                 {out: 'belt' ,in: [['iron_ingot', 6]]},
@@ -1151,8 +1257,9 @@
                 {out: 'store_coal' ,in: [['iron_ingot', 6]]},
                 {out: 'store_iron' ,in: [['iron_ingot', 6]]},
             ];
-            let debug_crafting = true;
+            let debug_crafting = false;
             if (debug_crafting){
+                crafting_layer = new YardLayer(8, 10);
                 for (let [k, v] of entity_table){
                     crafting_recipes.push({
                         in: [],
@@ -1241,7 +1348,7 @@
             }
 
             let $crafting_cont = crafting_layer.make_cont();
-            $('body').append($crafting_cont);
+            $('#crafting-cont').append($crafting_cont);
             crafting_layer.draw_all($crafting_cont);
 
 
@@ -1287,6 +1394,38 @@
             $('#stop').on('click', (e)=>{
                 clearInterval(ikk);
             });
+
+
+            $underground_layer_cont.hide();
+            let ground_visible = true;
+            function update_ground_visibility(){
+                if (ground_visible){
+                    $layer_cont.show();
+                    $underground_layer_cont.hide();
+                } else {
+                    $layer_cont.hide();
+                    $underground_layer_cont.show();
+                }
+            }
+
+            $('#flip-yard').on('mouseenter', (e)=>{
+                $layer_cont.show();
+                $underground_layer_cont.show();
+                $layer_cont.css('opacity', 0.5);
+                $underground_layer_cont.css('opacity', 0.5);
+            });
+
+            $('#flip-yard').on('mouseleave', (e)=>{
+                $layer_cont.css('opacity', '');
+                $underground_layer_cont.css('opacity', '');
+                update_ground_visibility();
+            });
+
+            $('#flip-yard').on('click', (e)=>{
+                ground_visible = !ground_visible;
+                update_ground_visibility();
+            });
+
         </script>
         <script>
             /*
