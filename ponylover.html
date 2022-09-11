@@ -71,6 +71,16 @@
                 let [tx, ty] = [inst.x - dx, inst.y - dy];
                 return [tx, ty];
             }
+            function entity_dir_source_left(inst){
+                let [dx, dy] = cardinal[inst.state.dir];
+                let [tx, ty] = [inst.x + dy, inst.y - dx];
+                return [tx, ty];
+            }
+            function entity_dir_source_right(inst){
+                let [dx, dy] = cardinal[inst.state.dir];
+                let [tx, ty] = [inst.x - dy, inst.y + dx];
+                return [tx, ty];
+            }
 
             function entity_dir_target(inst){
                 let [dx, dy] = cardinal[inst.state.dir];
@@ -257,9 +267,9 @@
                         let tx = inst.x;
                         let ty = inst.y;
                         if (inst.state.hv === 0){
-                            tx += leftup ? -1 : 1;
-                        } else {
                             ty += leftup ? -1 : 1;
+                        } else {
+                            tx += leftup ? -1 : 1;
                         }
                         if (entity_output_item(inst, tx, ty, old_item_inst.type, old_item_inst.state)){
                             inst.layer.next_item_sublayer.swap(inst.x, inst.y, item_table.get('empty'), null);
@@ -298,6 +308,7 @@
                     this.product_state = product_state;
                     this.product_amount = product_amount;
                     this.cooldown_ticks = cooldown_ticks;
+                    this.enable_lr_input = true;
                 }
                 can_place_item_on(inst){return false;}
                 check_fulfill(inst){
@@ -340,23 +351,32 @@
                         return;
                     }
                     let [sx, sy] = entity_dir_source(inst);
+                    if (inst.layer.time % 3 == 1){
+                        [sx, sy] = entity_dir_source_left(inst);
+                    } else if (inst.layer.time % 3 == 2){
+                        [sx, sy] = entity_dir_source_right(inst);
+                    }
                     if (inst.layer.get_item_changed(sx, sy)
                         || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
                         return;
                     }
-                    let ingredient_i = this.ingredient_f(
-                        inst.layer.item_sublayer.get_inst(sx, sy).type,
-                        inst.layer.item_sublayer.get_inst(sx, sy).state
-                    )
+                    let ingredient_i = -1;
+                    let input = inst.layer.item_sublayer.get_inst(sx, sy);
+                    let [type, state] = [input.type, input.state];
+                    if (this.on_input_item){
+                        ingredient_i = this.on_input_item(inst, type, state);
+                    } else {
+                        ingredient_i = this.ingredient_f(type, state);
+                    }
                     if (ingredient_i === -1){
                         return;
                     }
-                    inst.state.current_amounts[ingredient_i]++;
-                    let [type, state] = inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
-                    inst.layer.set_item_changed(sx, sy, true);
-                    if (this.on_input_item){
-                        this.on_input_item(inst, type, state);
+                    if (inst.state.current_amounts[ingredient_i] >= this.amounts[ingredient_i]){
+                        return;
                     }
+                    inst.state.current_amounts[ingredient_i]++;
+                    inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
+                    inst.layer.set_item_changed(sx, sy, true);
                     if (this.check_fulfill(inst)){
                         this.set_fulfill(inst);
                     }
@@ -531,8 +551,8 @@
                 ['anti_iron_ingot', new IconItem("./texture.png", 3, 2)],
                 ['lead_ingot', new IconItem("./texture.png", 4, 2)],
                 ['fire', (()=>{let e = new IconItem("./texture.png", 0, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
-                ['light', new IconItem("./texture.png", 1, 4)],
-                ['elec', new IconItem("./texture.png", 2, 4)],
+                ['light', (()=>{let e = new IconItem("./texture.png", 1, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
+                ['elec', (()=>{let e = new IconItem("./texture.png", 2, 4); e.life = (inst)=>(120); e.kill_prob = (inst)=>(1-Math.pow(0.5, 1/20)); return e})()],
                 ['wormhole', new IconItem("./texture.png", 4, 4)],
             ]);
 
@@ -542,7 +562,7 @@
                 ['fast_belt', (()=>{let e = new BeltEnt(3); e.icon='./texture.png'; e.pos_x=1; e.pos_y=6; return e})()],
                 ['faster_belt', (()=>{let e = new BeltEnt(1); e.icon='./texture.png'; e.pos_x=2; e.pos_y=6; return e})()],
                 ['ladder', (()=>{let e = new LadderEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=7; return e})()],
-                ['router', (()=>{let e = new RouterEnt(5); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7; return e})()],
+                ['router', (()=>{let e = new RouterEnt(1); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7; return e})()],
                 ['filter', (()=>{let e = new FilterEnt(5); e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e})()],
                 ['gravity_gen', (()=>{
                     let e = new MachineEnt((type, state)=>(-1), [1], item_table.get('elec'), null, 6, 50);
@@ -607,6 +627,115 @@
                         }
                     }
                     e.icon='./texture.png'; e.pos_x=3; e.pos_y=9; return e
+                })()],
+                ['steam_gen', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('fire') ? 0 : -1), [2], item_table.get('elec'), null, 1, 10);
+                    e.icon='./texture.png'; e.pos_x=4; e.pos_y=9; return e
+                })()],
+                ['farm', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('light') ? 0 : -1), [12], item_table.get('food'), null, 1, 100);
+                    e.icon='./texture.png'; e.pos_x=5; e.pos_y=9; return e
+                })()],
+                ['magnifier', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('light') ? 0 : -1), [2], item_table.get('fire'), null, 1, 10);
+                    e.icon='./texture.png'; e.pos_x=6; e.pos_y=9; return e
+                })()],
+                ['lightbulb', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [3], item_table.get('empty'), null, 3, 10);
+                    e.on_output_item = (inst) => {
+                        let is_fire = Math.random() * 3 < 2;
+                        if (is_fire){
+                            return [item_table.get('fire'), null];
+                        } else {
+                            return [item_table.get('light'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=7; e.pos_y=9; return e
+                })()],
+                ['led', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [1], item_table.get('light'), null, 1, 3);
+                    e.icon='./texture.png'; e.pos_x=8; e.pos_y=9; return e
+                })()],
+                ['elec_furnace', (()=>{
+                    let e = new MachineEnt(null, [1, 24], item_table.get('iron_ingot'), null, 24, 100);
+                    e.on_input_item = (inst, type, state) => {
+                        if (inst.state.current_amounts[0] === 0){
+                            return type === item_table.get('iron_ore') ? 0 : -1;
+                        } else {
+                            return type === item_table.get('elec') ? 1 : -1;
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
+                })()],
+                ['battery', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('iron_ingot') ? 0 : -1), [24], item_table.get('empty'), null, 21, 100);
+                    e.on_output_item = (inst) => {
+                        if (inst.state.remaining_output == 1){
+                            return [item_table.get('iron_ore'), null];
+                        } else {
+                            return [item_table.get('elec'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=1; e.pos_y=10; return e
+                })()],
+                ['nuclear_reactor', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('uran_ingot') ? 0 : -1), [1], item_table.get('empty'), null, 145, 100);
+                    e.on_output_item = (inst) => {
+                        if (inst.state.remaining_output == 1){
+                            return [item_table.get('lead_ingot'), null];
+                        } else {
+                            return [item_table.get('fire'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=2; e.pos_y=10; return e
+                })()],
+                ['nuclear_antireactor', (()=>{
+                    let e = new MachineEnt(null, [1, 168], item_table.get('uran_ingot'), null, 1, 100);
+                    e.on_input_item = (inst, type, state) => {
+                        if (inst.state.current_amounts[0] === 0){
+                            return type === item_table.get('lead_ingot') ? 0 : -1;
+                        } else {
+                            return type === item_table.get('fire') ? 1 : -1;
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=3; e.pos_y=10; return e
+                })()],
+                ['anitimatter_gen', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('light') ? 0 : (type == item_table.get('fire') ? 1 : -1)), [144*4, 144*4], item_table.get('empty'), null, 2, 100);
+                    e.on_output_item = (inst) => {
+                        if (inst.state.remaining_output == 1){
+                            return [item_table.get('anti_iron_ingot'), null];
+                        } else {
+                            return [item_table.get('iron_ingot'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=4; e.pos_y=10; return e
+                })()],
+                ['anitimatter_reactor', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('iron_ingot') ? 0 : (type == item_table.get('anti_iron_ingot') ? 1 : -1)), [1, 1], item_table.get('empty'), null, 144*4+136*4, 100);
+                    e.on_output_item = (inst) => {
+                        if ((inst.state.remaining_output - 1) % (18+17) < 18){
+                            return [item_table.get('light'), null];
+                        } else {
+                            return [item_table.get('elec'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=5; e.pos_y=10; return e
+                })()],
+                ['wormhole_gen', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('light') ? 1 : -1)), [1728, 1728], item_table.get('wormhole'), null, 1, 100);
+                    e.icon='./texture.png'; e.pos_x=6; e.pos_y=10; return e
+                })()],
+                ['wormhole_reactor', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('wormhole') ? 0 : -1), [1], item_table.get('empty'), null, 1728+1680, 100);
+                    e.on_output_item = (inst) => {
+                        if ((inst.state.remaining_output - 1) % (36+35) < 36){
+                            return [item_table.get('elec'), null];
+                        } else {
+                            return [item_table.get('fire'), null];
+                        }
+                    }
+                    e.icon='./texture.png'; e.pos_x=7; e.pos_y=10; return e
                 })()],
             ]);
 
@@ -908,6 +1037,15 @@
                     out: 'belt'
                 }
             ];
+            let debug_crafting = true;
+            if (debug_crafting){
+                for (let [k, v] of entity_table){
+                    crafting_recipes.push({
+                        in: [],
+                        out: k
+                    });
+                }
+            }
             let crafting_recipes_positioned = new Map();
 
             let ground_crafting_region = {
@@ -993,12 +1131,12 @@
             crafting_layer.draw_all($crafting_cont);
 
 
-            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('coal'), null);
-            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('food'), null);
-            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('food'), null);
-            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('food'), null);
-            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('coal'), null);
-            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('coal'), null);
+            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('fire'), null);
+            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('fire'), null);
+            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('fire'), null);
+            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('fire'), null);
+            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('fire'), null);
+            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('fire'), null);
             ground_layer.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
             ground_layer.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
@@ -1006,10 +1144,10 @@
             ground_layer.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
             ground_layer.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
             ground_layer.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('villager'), {dir: 2});
+            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('steam_gen'), {dir: 2});
             let bi = ground_layer.next_entity_sublayer.get_inst(3, 2)
             bi.type.init_other_states(bi.state);
-            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('gravity_gen'), {dir: 3});
+            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
             let bi1 = ground_layer.next_entity_sublayer.get_inst(4, 2)
             bi1.type.init_other_states(bi1.state);
             ground_layer.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
@@ -1018,9 +1156,14 @@
             ground_layer.next_entity_sublayer.swap(6, 4, entity_table.get('filter'), {dir: 0, filter_inited:false, filter_item_type:null});
             ground_layer.draw_all($layer_cont);
             let ikk = -1;
+            $('body').append('<input type="text" id="spawn">');
             $('#advance').on('click', (e)=>{
                 ikk = setInterval(()=>{
                     $("#time").text(ground_layer.time);
+                    let to_spawn = $('#spawn').val();
+                    if (item_table.has(to_spawn)){
+                        ground_layer.next_item_sublayer.swap(0, 0, item_table.get(to_spawn), null);
+                    }
                     ground_layer.tick_all();
                     ground_layer.draw_all($layer_cont);
                     underground_layer.tick_all();
@@ -1053,7 +1196,7 @@
                     - 能量转化
                         - 势能电池（50%效率）：抬升机放6电转化成基态（可以手动消耗饭激发）；村民消耗1饭，将旁边（4邻居）的抬升机激发1个(冷却时间约5s)
                         - 热能电池（37.5%效率）：炉子将1煤转化成9火，蒸汽机将2火转化成1电；大棚将12光转化成1粮食，1粮食在炉子转化成1饭，1饭在炉子转化成1煤
-                        - 太阳能电池：放大镜把2光转化成1火；白炽灯把3电转化成1光和2火，- LED灯把1电转化成1光
+                        - 太阳能电池：放大镜把2光转化成1火；白炽灯把3电转化成期望值1光和2火，- LED灯把1电转化成1光
                         - 化学电池（83%效率）：电炉（消耗24电把1铁矿变24铁）+ 原电池（把24铁变1铁矿，产生20电）
                         - 可逆核过程电池（86%效率）：核反应堆把1铀变1铅，放144火，核子置入器把1铅变1铀，吸168火
                         - 反物质电池：光子对撞机吸144*4光和144*4火产生1铁和1反铁，两者在约束反应器中产生144*4光和136*4电
@@ -1061,7 +1204,7 @@
 
                     - 电动车充电（消耗6电，产生1圆钱，冷却6s）
                     - 钻头（挖矿）取决于位置，挖出铁矿、煤（1次挖24个）或1铀。消耗6电挖一格。铀是消耗6电和12铁
-                    - 电炉（冶炼矿物）消耗24电把1铁矿变24铁，消耗24电把1铀矿变24铀
+                    - 电炉（冶炼矿物）消耗24电把1铁矿变24铁，离心机消耗24电把1铀矿变24铀
                     - 反物质增殖装置：24反铁和6铅，75%概率变25反铁，25%概率变24反铁
                     - 宇宙际强力浓差虫洞增殖装置：12微虫洞和3反铁，75%概率变13微虫洞，25%概率变12微虫洞
                 固定设施：
