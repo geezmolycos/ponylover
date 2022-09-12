@@ -81,7 +81,7 @@
             }
 
             #handinfo-cont {
-                width: calc(var(--game-grid-size) * 4 + var(--game-grid-border));
+                width: calc(var(--game-grid-size) * 6 + var(--game-grid-border));
             }
 
             #crafting-cont {
@@ -511,7 +511,40 @@
                         .css('transform', `rotate(${rotation})`)
                         .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
                 }
-                info(inst){}
+                info(inst){
+                    let $e = $('<span>');
+                    if (this.basicinfo){
+                        $e.append(this.basicinfo(inst));
+                    }
+                    $e.append($('<br><br>'));
+                    let ing_names = [];
+                    if (this.ing_names){
+                        ing_names = this.ing_names(inst);
+                    }
+                    $e.append('原料: ')
+                    $e.append($('<br>'));
+                    for (let i in ing_names){
+                        let name = ing_names[i];
+                        let current_amount = inst.state.current_amounts[i];
+                        let required_amount = inst.type.amounts[i];
+                        if (current_amount == required_amount){
+                            $e.append($('<span>').text(`${name}: ${current_amount}/${required_amount}`).css('color', 'green'));
+                        } else {
+                            $e.append($('<span>').text(`${name}: ${current_amount}/${required_amount}`));
+                        }
+                        $e.append($('<br>'));
+                    }
+                    $e.append($('<br>'));
+                    if (inst.state.cooldown_ticks !== 0){
+                        $e.append($('<span>').text('制作中...').css('color', 'red'));
+                        $e.append($('<br>'));
+                    }
+                    if (inst.state.remaining_output !== 0 && inst.state.cooldown_ticks === 0){
+                        $e.append($('<span>').text('输出物品中...').css('color', 'olive'));        
+                        $e.append($('<br>'));
+                    }
+                    return $e;
+                }
                 enum_states(){
                     return [
                         ['dir', [0,1,2,3]],
@@ -520,114 +553,6 @@
                 init_other_states(state){
                     state.fulfilled = false;
                     state.remaining_output = 0;
-                    state.current_amounts = new Array(this.amounts.length).fill(0);
-                    if (!state.cooldown_ticks){
-                        state.cooldown_ticks = 0;
-                    }
-                }
-            }
-
-            class TwoOutputMachineEnt extends EmptyEnt{
-                constructor(ingredient_f, amounts, product_type_a, product_state_a, product_amount_a, product_type_b, product_state_b, product_amount_b){
-                    super();
-                    this.ingredient_f = ingredient_f;
-                    this.amounts = amounts;
-                    this.product_type_a = product_type_a;
-                    this.product_state_a = product_state_a;
-                    this.product_amount_a = product_amount_a;
-                    this.product_type_b = product_type_b;
-                    this.product_state_b = product_state_b;
-                    this.product_amount_b = product_amount_b;
-                }
-                can_place_item_on(inst){return false;}
-                check_fulfill(inst){
-                    if (inst.state.fulfilled){
-                        return true;
-                    }
-                    let fulfilled = true;
-                    $.each(this.amounts, (i, val) => {
-                        if (inst.state.current_amounts[i] < val){
-                            fulfilled = false;
-                            return false;
-                        }
-                    });
-                    return fulfilled;
-                }
-                hv(inst){
-                    return inst.state.dir === 0 || inst.state.dir === 3 ? 1 : 0;
-                }
-                tick(inst){
-                    if (inst.state.remaining_output_a > 0 || inst.state.remaining_output_b > 0){
-                        if (inst.state.cooldown_ticks > 0){
-                            inst.state.cooldown_ticks--;
-                            return;
-                        }
-                        let [txa, tya, txb, tyb] = [inst.x, inst.y, inst.x, inst.y];
-                        if (this.hv(inst) === 0){
-                            txa--; txb++;
-                        } else {
-                            tya--; tyb++;
-                        }
-                        if (inst.state.remaining_output_a > 0){
-                            if (entity_output_item(inst, txa, tya, this.product_type_a, this.product_state_a)){
-                                inst.state.remaining_output_a--;
-                                if (inst.state.remaining_output_a == 0 && inst.state.remaining_output_b == 0){
-                                    this.init_other_states(inst.state);
-                                }
-                            }
-                        }
-                        if (inst.state.remaining_output_b > 0){
-                            if (entity_output_item(inst, txb, tyb, this.product_type_b, this.product_state_b)){
-                                inst.state.remaining_output_b--;
-                                if (inst.state.remaining_output_a == 0 && inst.state.remaining_output_b == 0){
-                                    this.init_other_states(inst.state);
-                                }
-                            }
-                        }
-                        return;
-                    }
-
-                    let [sx, sy] = entity_dir_source(inst);
-                    if (inst.layer.get_item_changed(sx, sy)
-                        || inst.layer.item_sublayer.get_inst(sx, sy).type === item_table.get('empty')){
-                        return;
-                    }
-                    let ingredient_i = this.ingredient_f(
-                        inst.layer.item_sublayer.get_inst(sx, sy).type,
-                        inst.layer.item_sublayer.get_inst(sx, sy).state
-                    )
-                    if (ingredient_i === -1){
-                        return;
-                    }
-                    inst.state.current_amounts[ingredient_i]++;
-                    inst.layer.next_item_sublayer.swap(sx, sy, item_table.get('empty'), null);
-                    inst.layer.set_item_changed(sx, sy, true);
-                    if (this.check_fulfill(inst)){
-                        inst.state.fulfilled = true;
-                        inst.state.remaining_output_a = this.product_amount_a;
-                        inst.state.remaining_output_b = this.product_amount_b;
-                        inst.state.cooldown_ticks = this.cooldown_ticks;
-                    }
-                }
-                draw(inst){
-                    let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
-                    return $('<div>')
-                        .css('background-image', `url('${this.icon}')`)
-                        .css('background-size', '512px 512px')
-                        .css('width', '100%').css('height', '100%')
-                        .css('transform', `rotate(${rotation})`)
-                        .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
-                }
-                info(inst){}
-                enum_states(){
-                    return [
-                        ['dir', [0,1,2,3]],
-                    ];
-                }
-                init_other_states(state){
-                    state.fulfilled = false;
-                    state.remaining_output_a = 0;
-                    state.remaining_output_b = 0;
                     state.current_amounts = new Array(this.amounts.length).fill(0);
                     if (!state.cooldown_ticks){
                         state.cooldown_ticks = 0;
@@ -651,11 +576,16 @@
                     this.pos_y = pos_y;
                 }
                 draw(inst){
+                    let opacity = 1;
+                    if (this.life && inst.state && inst.state.life){
+                        opacity = inst.state.life / this.life(inst) * 0.5 + 0.5;
+                    }
                     return $('<div>')
                         .css('background-image', `url('${this.icon}')`)
                         .css('background-size', '512px 512px')
                         .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`)
-                        .css('width', '100%').css('height', '100%');
+                        .css('opacity', opacity)
+                        .css('width', '32px').css('height', '32px');
                 }
                 info(inst){}
             }
@@ -680,15 +610,55 @@
 
             let entity_table = new Map([
                 ['empty', new EmptyEnt()],
-                ['belt', (()=>{let e = new BeltEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=6; return e})()],
-                ['fast_belt', (()=>{let e = new BeltEnt(3); e.icon='./texture.png'; e.pos_x=1; e.pos_y=6; return e})()],
-                ['faster_belt', (()=>{let e = new BeltEnt(1); e.icon='./texture.png'; e.pos_x=2; e.pos_y=6; return e})()],
-                ['ladder', (()=>{let e = new LadderEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=7; return e})()],
-                ['router', (()=>{let e = new RouterEnt(1); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7; return e})()],
-                ['filter', (()=>{let e = new FilterEnt(5); e.icon='./texture.png'; e.pos_x=2; e.pos_y=7; return e})()],
+                ['belt', (()=>{
+                    let e = new BeltEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=6;
+                    e.info = (inst)=>('普通的传送带，1秒可以将物品运输4格。');
+                    return e
+                })()],
+                ['fast_belt', (()=>{
+                    let e = new BeltEnt(3); e.icon='./texture.png'; e.pos_x=1; e.pos_y=6;
+                    e.info = (inst)=>('更好的传送带，1秒可以将物品运输7格。');
+                    return e
+                })()],
+                ['faster_belt', (()=>{
+                    let e = new BeltEnt(1); e.icon='./texture.png'; e.pos_x=2; e.pos_y=6;
+                    e.info = (inst)=>('使用金属铅加强过的传送带，可以承受更高的旋转速度，1秒可以将物品运输20格。');
+                    return e
+                })()],
+                ['ladder', (()=>{
+                    let e = new LadderEnt(5); e.icon='./texture.png'; e.pos_x=0; e.pos_y=7;
+                    e.info = (inst)=>('传送梯，将物品在地表和地下间运输。');
+                    return e
+                })()],
+                ['router', (()=>{
+                    let e = new RouterEnt(1); e.icon='./texture.png'; e.pos_x=1; e.pos_y=7;
+                    e.info = (inst)=>('分流器，将其上的物品分流到两侧。');
+                    return e
+                })()],
+                ['filter', (()=>{
+                    let e = new FilterEnt(5); e.icon='./texture.png'; e.pos_x=2; e.pos_y=7;
+                    e.info = (inst)=>(
+                        $('<span>')
+                            .append('过滤器，记住其上的第一个物品，使此类物品通过，其他物品分流至两侧。')
+                            .append($('<br><br>'))
+                            .append('更改方向后会自动清除物品')
+                            .append($('<br><br>'))
+                            .append(inst.state.filter_inited ? '当前物品: ' : '当前没有物品')
+                            .append(inst.state.filter_inited ? inst.state.filter_item_type.draw(null) : null));
+                    return e
+                })()],
                 ['gravity_gen', (()=>{
                     let e = new MachineEnt((type, state)=>(-1), [1], item_table.get('elec'), null, 6, 50);
-                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=9; return e
+                    e.icon='./texture.png'; e.pos_x=0; e.pos_y=9;
+                    e.info = (inst)=>(
+                        $('<span>')
+                            .append('过滤器，记住其上的第一个物品，使此类物品通过，其他物品分流至两侧。')
+                            .append($('<br><br>'))
+                            .append('更改方向后会自动清除物品')
+                            .append($('<br><br>'))
+                            .append(inst.state.filter_inited ? '当前物品: ' : '当前没有物品')
+                            .append(inst.state.filter_inited ? inst.state.filter_item_type.draw(null) : null));
+                    return e
                 })()],
                 ['villager', (()=>{
                     let e = new MachineEnt(
@@ -716,11 +686,13 @@
                         gen_inst.type.set_fulfill(gen_inst);
                         return [item_table.get('empty'), null];
                     }
+                    e.basicinfo = (inst)=>("为你工作的村民，吃食物后可以激活旁边的抬升机。");
+                    e.ing_names = (inst)=>(["食物"]);
                     e.icon='./texture.png'; e.pos_x=2; e.pos_y=9; return e
                 })()],
                 ['stove', (()=>{
                     let e = new MachineEnt(
-                        (type, state)=>((type == item_table.get('coal') || type == item_table.get('crop') || type == item_table.get('food')) ? 0 : -1),
+                        null,
                         [1], item_table.get('empty'), null, 1, 100
                     );
                     e.on_input_item = (inst, type, state)=>{
@@ -732,6 +704,7 @@
                             inst.state.recipe = 'food';
                         }
                         inst.state.coal_output_amount_init = false;
+                        return (type == item_table.get('coal') || type == item_table.get('crop') || type == item_table.get('food')) ? 0 : -1;
                     }
                     e.on_output_item = (inst) => {
                         if (inst.state.recipe == 'coal'){
@@ -748,18 +721,26 @@
                             return [item_table.get('empty'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("火炉，可以将煤燃烧成火，将粮食做成食物，将食物烧成煤。");
+                    e.ing_names = (inst)=>(["可燃烧物"]);
                     e.icon='./texture.png'; e.pos_x=3; e.pos_y=9; return e
                 })()],
                 ['steam_gen', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('fire') ? 0 : -1), [2], item_table.get('elec'), null, 1, 10);
+                    e.basicinfo = (inst)=>("蒸汽发电机，可以使用火来发电。");
+                    e.ing_names = (inst)=>(["火"]);
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=9; return e
                 })()],
                 ['farm', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('light') ? 0 : -1), [12], item_table.get('food'), null, 1, 100);
+                    e.basicinfo = (inst)=>("大棚农场，吸收外界的光促进植物生长，可以产出粮食。");
+                    e.ing_names = (inst)=>(["光"]);
                     e.icon='./texture.png'; e.pos_x=5; e.pos_y=9; return e
                 })()],
                 ['magnifier', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('light') ? 0 : -1), [2], item_table.get('fire'), null, 1, 10);
+                    e.basicinfo = (inst)=>("放大镜，上面的凸透镜可以将光聚焦起来，产生火。");
+                    e.ing_names = (inst)=>(["光"]);
                     e.icon='./texture.png'; e.pos_x=6; e.pos_y=9; return e
                 })()],
                 ['lightbulb', (()=>{
@@ -772,10 +753,14 @@
                             return [item_table.get('light'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("白炽灯，消耗电，大多数电都用作加热灯丝了，只有少数电可以用来发光。");
+                    e.ing_names = (inst)=>(["电"]);
                     e.icon='./texture.png'; e.pos_x=7; e.pos_y=9; return e
                 })()],
                 ['led', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [1], item_table.get('light'), null, 1, 3);
+                    e.basicinfo = (inst)=>("利用半导体科技制作的发光二极管，可以将输入的所有电能转化成光能。");
+                    e.ing_names = (inst)=>(["电"]);
                     e.icon='./texture.png'; e.pos_x=8; e.pos_y=9; return e
                 })()],
                 ['elec_furnace', (()=>{
@@ -787,10 +772,12 @@
                             return type === item_table.get('elec') ? 1 : -1;
                         }
                     }
+                    e.basicinfo = (inst)=>("电炉，利用电将铁矿冶炼成铁锭。");
+                    e.ing_names = (inst)=>(['铁矿', "电"]);
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
                 })()],
                 ['uran_furnace', (()=>{
-                    let e = new MachineEnt(null, [1, 24], item_table.get('uran_ingot'), null, 24, 100);
+                    let e = new MachineEnt(null, [1, 24], item_table.get('uran_ingot'), null, 3, 100);
                     e.on_input_item = (inst, type, state) => {
                         if (inst.state.current_amounts[0] === 0){
                             return type === item_table.get('uran_ore') ? 0 : -1;
@@ -798,6 +785,8 @@
                             return type === item_table.get('elec') ? 1 : -1;
                         }
                     }
+                    e.basicinfo = (inst)=>("铀离心机，将铀矿处理为可供给反应堆的铀锭。");
+                    e.ing_names = (inst)=>(["铀矿", '电']);
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
                 })()],
                 ['battery', (()=>{
@@ -809,6 +798,8 @@
                             return [item_table.get('elec'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("化学原电池，可以从金属铁到铁矿的反应中获取电能。");
+                    e.ing_names = (inst)=>(['铁锭']);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=10; return e
                 })()],
                 ['nuclear_reactor', (()=>{
@@ -820,6 +811,8 @@
                             return [item_table.get('fire'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("核反应堆，从铀元素的链式裂变反应中获取能量。");
+                    e.ing_names = (inst)=>(['铀锭']);
                     e.icon='./texture.png'; e.pos_x=2; e.pos_y=10; return e
                 })()],
                 ['nuclear_antireactor', (()=>{
@@ -831,6 +824,8 @@
                             return type === item_table.get('fire') ? 1 : -1;
                         }
                     }
+                    e.basicinfo = (inst)=>("核子置入器，使用能量将质子和中子塞入铅原子核中，产生铀元素。");
+                    e.ing_names = (inst)=>(['铅锭', '火']);
                     e.icon='./texture.png'; e.pos_x=3; e.pos_y=10; return e
                 })()],
                 ['anitimatter_gen', (()=>{
@@ -842,6 +837,8 @@
                             return [item_table.get('iron_ingot'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("光子对撞机，使用极高能量将光子转化为正反物质，以铁和反铁的形式储存在引力井中。");
+                    e.ing_names = (inst)=>(['光', '火']);
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=10; return e
                 })()],
                 ['anitimatter_reactor', (()=>{
@@ -853,10 +850,14 @@
                             return [item_table.get('elec'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("约束反应器，操纵引力壁垒，使引力井中的正反物质缓慢湮灭，放出光能和电能。");
+                    e.ing_names = (inst)=>(['光', '火']);
                     e.icon='./texture.png'; e.pos_x=5; e.pos_y=10; return e
                 })()],
                 ['wormhole_gen', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('light') ? 1 : -1)), [1728, 1728], item_table.get('wormhole'), null, 1, 100);
+                    e.basicinfo = (inst)=>("时空界面，通过操作和折叠极端能量条件下的空间，制造稳定的微虫洞，其中包含巨大能量。");
+                    e.ing_names = (inst)=>(['电', '光']);
                     e.icon='./texture.png'; e.pos_x=6; e.pos_y=10; return e
                 })()],
                 ['wormhole_reactor', (()=>{
@@ -868,10 +869,14 @@
                             return [item_table.get('fire'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("反时空界面，解构微虫洞内部的空间结构，利用时空的展开获取巨大能量，放出电能和热能。");
+                    e.ing_names = (inst)=>(['电', '光']);
                     e.icon='./texture.png'; e.pos_x=7; e.pos_y=10; return e
                 })()],
                 ['coin_maker', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [6], item_table.get('coin'), null, 1, 120);
+                    e.basicinfo = (inst)=>("电动车充电站，通过给邻居家的电动车充电赚钱。");
+                    e.ing_names = (inst)=>(['电']);
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=11; return e
                 })()],
                 ['drill', (()=>{
@@ -897,10 +902,14 @@
                             }
                         }
                     }
+                    e.basicinfo = (inst)=>("挖矿钻头，只能在地下工作，依照所处的位置不同，可能挖出铁矿或煤。");
+                    e.ing_names = (inst)=>(['电']);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['uran_drill', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('uran_ore'), null, 24, 480);
+                    e.basicinfo = (inst)=>("深层挖矿钻头，只能在地下工作，需要消耗铁锭，能够挖出铀矿。");
+                    e.ing_names = (inst)=>(['电', '铁锭']);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['antimatter_enricher', (()=>{
@@ -916,6 +925,8 @@
                             return [item_table.get('anti_iron_ingot'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("反物质增殖装置，使用物质和反物质的交互作用，进行反物质的远距交换。消耗重元素金属铅，将反铁变多。因为宇宙环境的不稳定性，增殖过程有可能会失败。");
+                    e.ing_names = (inst)=>(['反铁锭', '铅锭']);
                     e.icon='./texture.png'; e.pos_x=2; e.pos_y=11; return e
                 })()],
                 ['wormhole_enricher', (()=>{
@@ -931,18 +942,26 @@
                             return [item_table.get('wormhole'), null];
                         }
                     }
+                    e.basicinfo = (inst)=>("宇宙际强力浓差虫洞增殖装置，使用多元宇宙的物理特性差别，展开已有微虫洞中蕴含的连续时空，使用反物质交换出平行宇宙中存在的微虫洞。因为平行宇宙的时空特性不稳定，增殖过程有可能会失败。");
+                    e.ing_names = (inst)=>(['微虫洞', '反铁锭']);
                     e.icon='./texture.png'; e.pos_x=3; e.pos_y=11; return e
                 })()],
                 ['store_food', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [2], item_table.get('food'), null, 1, 100);
+                    e.basicinfo = (inst)=>("商店，在这里可以买食物。");
+                    e.ing_names = (inst)=>(['钱币']);
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
                 ['store_coal', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('coal'), null, 1, 100);
+                    e.basicinfo = (inst)=>("商店，在这里可以买煤。");
+                    e.ing_names = (inst)=>(['钱币']);
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
                 ['store_iron', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('iron'), null, 1, 100);
+                    e.basicinfo = (inst)=>("商店，在这里可以买铁锭。");
+                    e.ing_names = (inst)=>(['钱币']);
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
             ]);
@@ -1121,7 +1140,11 @@
                     };
                 }
 
-                make_cont(){
+                layer_specific_info(inst){
+                    return null;
+                }
+
+                make_cont(callback_output_info, callback_clear_info){
                     let $cont = $('<div>').addClass('layer-cont');
                     let $grid_cont = this.entity_sublayer.make_cont().addClass('grid-cont');
                     let $entity_cont = this.entity_sublayer.make_cont().addClass('entity-sublayer-cont');
@@ -1137,17 +1160,33 @@
                         }
                         this.next_entity_sublayer.swap(x, y, res.type, res.state);
                     });
+                    let task_id = null;
                     $mouseclick_cont.children('.cell-wrapper').on('mouseenter', (e)=>{
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
                         $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', 'rgba(255, 255, 0, 0.2)');
                         $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '0.2');
+                        let f = ()=>{
+                            let inst = this.next_entity_sublayer.get_inst(x, y);
+                            if (callback_output_info){
+                                let $d = $('<div>');
+                                $d.append(inst.type.info(inst));
+                                $d.append(this.layer_specific_info(inst));
+                                callback_output_info($d);
+                            }
+                        }
+                        f();
+                        task_id = setInterval(f, 200);
                     });
                     $mouseclick_cont.children('.cell-wrapper').on('mouseleave', (e)=>{
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
                         $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', '');
                         $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '');
+                        clearInterval(task_id);
+                        if (callback_clear_info){
+                            callback_clear_info();
+                        }
                     });
                     $cont.append($grid_cont).append($entity_cont).append($item_cont).append($mouseclick_cont);
                     return $cont;
@@ -1160,6 +1199,30 @@
                     this.next_item_sublayer.draw_all($item_cont);
                 }
             }
+
+            let global_debug = true;
+            let debug_tooltip = global_debug;
+
+            function clear_info(){
+                $('.item-info').empty();
+            }
+
+            function clear_and_show_hand(){
+                let entity_inst = hand_layer.get_entity_inst();
+                let info = entity_inst.type.info(entity_inst);
+                $('.item-info').empty();
+                $('.item-info').append(info);
+                if (debug_tooltip){
+                    $('.item-debug-state').empty();
+                    $('.item-debug-state').append(JSON.stringify(entity_inst.state));
+                }
+            }
+
+            function show_info(info){
+                clear_info();
+                $('.item-info').append(info);
+            }
+            
         
             let ground_layer = new YardLayer(12, 8);
             let underground_layer = new YardLayer(12, 8);
@@ -1182,8 +1245,8 @@
                 };
             }
             
-            let $layer_cont = ground_layer.make_cont().addClass('ground-layer-cont');
-            let $underground_layer_cont = underground_layer.make_cont().addClass('underground-layer-cont');
+            let $layer_cont = ground_layer.make_cont(show_info, clear_and_show_hand).addClass('ground-layer-cont');
+            let $underground_layer_cont = underground_layer.make_cont(show_info, clear_and_show_hand).addClass('underground-layer-cont');
             $('#yard-cont').append($layer_cont);
             $('#yard-cont').append($underground_layer_cont);
 
@@ -1194,7 +1257,7 @@
             hand_layer.get_item_inst = function(){
                 return this.next_item_sublayer.get_inst(0, 0);
             }
-            let $hand_layer_cont = hand_layer.make_cont();
+            let $hand_layer_cont = hand_layer.make_cont(show_info, clear_and_show_hand);
             $('#hand-cont').append($hand_layer_cont);
             ground_layer.hand_layer = hand_layer;
             underground_layer.hand_layer = hand_layer;
@@ -1269,7 +1332,7 @@
             $('#info-cont').append($('<div>').addClass('item-debug-state'));
             $state_selector_cont.append($('<div>').addClass('state-enum'));
             let selector_layer = new YardLayer(8, 2);
-            let $selector_layer_cont = selector_layer.make_cont();
+            let $selector_layer_cont = selector_layer.make_cont(show_info, clear_and_show_hand);
             $state_selector_cont.children('.state-enum').append($selector_layer_cont);
             $('#state-selector-cont').append($state_selector_cont);
 
@@ -1293,13 +1356,9 @@
             }
 
             function redraw_hand_and_selector(){
-                hand_layer.draw_all($hand_layer_cont);
                 let entity_inst = hand_layer.get_entity_inst();
-                let info = entity_inst.type.info(entity_inst);
-                $('.item-info').empty();
-                $('.item-info').append(info);
-                $('.item-debug-state').empty();
-                $('.item-debug-state').append(JSON.stringify(entity_inst.state));
+                hand_layer.draw_all($hand_layer_cont);
+                clear_and_show_hand();
                 let enum_states = entity_inst.type.enum_states();
                 let x=0, y=0;
                 selector_layer.next_entity_sublayer.empty(entity_table.get('empty'));
@@ -1356,7 +1415,7 @@
                 {out: 'store_coal' ,in: [['iron_ingot', 6]]},
                 {out: 'store_iron' ,in: [['iron_ingot', 6]]},
             ];
-            let debug_crafting = true;
+            let debug_crafting = global_debug;
             if (debug_crafting){
                 crafting_layer = new YardLayer(8, 10);
                 for (let [k, v] of entity_table){
@@ -1452,7 +1511,7 @@
                 return {able: false};
             }
 
-            let $crafting_cont = crafting_layer.make_cont();
+            let $crafting_cont = crafting_layer.make_cont(show_info, clear_and_show_hand);
             $('#crafting-cont').append($crafting_cont);
             crafting_layer.draw_all($crafting_cont);
 
@@ -1540,7 +1599,7 @@
 
                     - 电动车充电（消耗6电，产生1圆钱，冷却6s）
                     - 钻头（挖矿）取决于位置，挖出铁矿、煤（1次挖24个）或1铀。消耗6电挖一格。铀是消耗6电和12铁
-                    - 电炉（冶炼矿物）消耗24电把1铁矿变24铁，离心机消耗24电把1铀矿变24铀
+                    - 电炉（冶炼矿物）消耗24电把1铁矿变24铁，离心机消耗24电把1铀矿变3铀
                     - 反物质增殖装置：24反铁和6铅，75%概率变25反铁，25%概率变24反铁
                     - 宇宙际强力浓差虫洞增殖装置：12微虫洞和3反铁，75%概率变13微虫洞，25%概率变12微虫洞
                 固定设施：
@@ -1552,7 +1611,7 @@
 
                 短期TODO:
                     - [x] 鼠标指到物品上会隐藏
-                    - 动态实体描述
+                    - [x] 动态实体描述
                     - 合成器、钻头等等实体的状态贴图或进度条
                     - 日夜循环，白天没太阳
                     - 只有下层能挖矿
