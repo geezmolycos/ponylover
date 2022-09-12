@@ -129,6 +129,21 @@
                 bottom: 0;
             }
 
+            #hand-cont {
+                position: relative;
+            }
+
+            .hand-main-indicator {
+                position: absolute;
+                display: block;
+                left: 0;
+                top: 0;
+                width: calc(var(--game-grid-size) + var(--game-grid-border));
+                height: calc(var(--game-grid-size) + var(--game-grid-border));
+                box-sizing: border-box;
+                border: 3px solid orange;
+            }
+
         </style>
     </head>
     <body>
@@ -138,7 +153,7 @@
                 <div id="main-cont">
                     <div id="yard-cont"></div>
                     <div id="handinfo-cont">
-                        <div><span id="hand-cont"></span></div>
+                        <div id="hand-cont"></div>
                         <div id="info-cont"></div>
                         <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button></div>
                     </div>
@@ -1125,11 +1140,13 @@
                     $mouseclick_cont.children('.cell-wrapper').on('mouseenter', (e)=>{
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
+                        $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', 'rgba(255, 255, 0, 0.2)');
                         $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '0.2');
                     });
                     $mouseclick_cont.children('.cell-wrapper').on('mouseleave', (e)=>{
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
+                        $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', '');
                         $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '');
                     });
                     $cont.append($grid_cont).append($entity_cont).append($item_cont).append($mouseclick_cont);
@@ -1156,6 +1173,7 @@
                     };
                 }
                 let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
+                hand_autosupply();
                 redraw_hand_and_selector();
                 return {
                     able: true,
@@ -1169,7 +1187,7 @@
             $('#yard-cont').append($layer_cont);
             $('#yard-cont').append($underground_layer_cont);
 
-            let hand_layer = new YardLayer(1, 1);
+            let hand_layer = new YardLayer(3, 2);
             hand_layer.get_entity_inst = function(){
                 return this.next_entity_sublayer.get_inst(0, 0);
             }
@@ -1180,6 +1198,71 @@
             $('#hand-cont').append($hand_layer_cont);
             ground_layer.hand_layer = hand_layer;
             underground_layer.hand_layer = hand_layer;
+
+            hand_layer.on_mouse_place_entity = (inst)=>{
+                let [x, y] = [inst.x, inst.y];
+                let i = inst.layer.xy2i(inst.x, inst.y);
+                if (i === 0){
+                    return {
+                        able: false
+                    };
+                }
+                let [orig_hand_type, orig_hand_state] = hand_layer.next_entity_sublayer.swap(0, 0, entity_table.get('empty'), null);
+                let [swap_out_type, swap_out_state] = hand_layer.next_entity_sublayer.swap(x, y, orig_hand_type, orig_hand_state);
+                hand_layer.next_entity_sublayer.swap(0, 0, swap_out_type, swap_out_state);
+                redraw_hand_and_selector();
+                return {
+                    able: false
+                };
+            }
+
+            function hand_has_space(){
+                let i=0;
+                let [x, y] = hand_layer.i2xy(i);
+                while (hand_layer.entity_sublayer.get_inst(x, y).type !== entity_table.get('empty')){
+                    i++;
+                    [x, y] = hand_layer.i2xy(i);
+                    if (i>= hand_layer.width * hand_layer.height){
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function hand_autosupply(){
+                let i=0;
+                let [x, y] = hand_layer.i2xy(i);
+                while (hand_layer.next_entity_sublayer.get_inst(x, y).type === entity_table.get('empty')){
+                    i++;
+                    [x, y] = hand_layer.i2xy(i);
+                    if (i>= hand_layer.width * hand_layer.height){
+                        return false;
+                    }
+                }
+                if (i === 0){
+                    return true;
+                }
+                let [orig_hand_type, orig_hand_state] = hand_layer.next_entity_sublayer.swap(0, 0, entity_table.get('empty'), null);
+                let [swap_out_type, swap_out_state] = hand_layer.next_entity_sublayer.swap(x, y, orig_hand_type, orig_hand_state);
+                hand_layer.next_entity_sublayer.swap(0, 0, swap_out_type, swap_out_state);
+                return true;
+            }
+
+            function hand_autoinsert(type, state){
+                let i=0;
+                let [x, y] = hand_layer.i2xy(i);
+                while (hand_layer.next_entity_sublayer.get_inst(x, y).type !== entity_table.get('empty')){
+                    i++;
+                    [x, y] = hand_layer.i2xy(i);
+                    if (i>= hand_layer.width * hand_layer.height){
+                        return false;
+                    }
+                }
+                hand_layer.next_entity_sublayer.swap(x, y, type, state);
+                return true;
+            }
+
+            $('#hand-cont').append($('<div>').addClass('hand-main-indicator'))
 
             let $state_selector_cont = $('<div>').addClass('state-selector-cont');
             $('#info-cont').append($('<div>').addClass('item-info'));
@@ -1202,6 +1285,7 @@
                     selected_states.set(state_name, inst.state[state_name]);
                 }
                 let [swap_out_type, swap_out_state] = hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
+                hand_autosupply();
                 redraw_hand_and_selector();
                 return {
                     able: false
@@ -1350,7 +1434,7 @@
             crafting_layer.on_mouse_place_entity = function(inst){
                 let i = inst.layer.xy2i(inst.x, inst.y);
                 let recipe = crafting_recipes_positioned.get(i);
-                if (hand_layer.next_entity_sublayer.get_inst(0, 0).type !== entity_table.get('empty')){
+                if (!hand_has_space()){
                     return {able: false};
                 }
                 if (can_craft(recipe.in).size == 0){
@@ -1362,7 +1446,7 @@
                             state[k] = selected_states.get(k);
                         }
                     }
-                    hand_layer.next_entity_sublayer.swap(0, 0, out_type, state);
+                    hand_autoinsert(out_type, state);
                     redraw_hand_and_selector();
                 }
                 return {able: false};
@@ -1477,7 +1561,7 @@
                     - 背景图
                     - 移动视角
                     - 放大缩小画面
-                    - 扩大物品栏面积
+                    - [x] 扩大物品栏面积
 
                 DLC或更新：
                 - 钻头效应变化
