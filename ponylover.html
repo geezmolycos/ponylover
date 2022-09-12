@@ -875,8 +875,8 @@
                         if (recipe == 'coal'){
                             return [item_table.get('coal'), null];
                         } else if (recipe == 'iron'){
-                            if (inst.remaining_output[0] < 24){
-                                return [null, null];
+                            if (inst.state.remaining_output < 24){
+                                return [item_table.get('empty'), null];
                             } else {
                                 return [item_table.get('iron_ore'), null];
                             }
@@ -885,7 +885,7 @@
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['uran_drill', (()=>{
-                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('empty'), null, 24, 480);
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('uran_ore'), null, 24, 480);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['antimatter_enricher', (()=>{
@@ -895,7 +895,7 @@
                             if (Math.random() < 0.75){
                                 return [item_table.get('anti_iron_ingot'), null];
                             } else {
-                                return [null, null];
+                                return [item_table.get('empty'), null];
                             }
                         } else {
                             return [item_table.get('anti_iron_ingot'), null];
@@ -910,7 +910,7 @@
                             if (Math.random() < 0.75){
                                 return [item_table.get('wormhole'), null];
                             } else {
-                                return [null, null];
+                                return [item_table.get('empty'), null];
                             }
                         } else {
                             return [item_table.get('wormhole'), null];
@@ -954,7 +954,7 @@
                     let $sublayer_cont = $('<div>').addClass('sublayer-cont');
                     for (let y=0; y<this.layer.height; y++){
                         for (let x=0; x<this.layer.width; x++){
-                            const wrapper = $('<div>').addClass('cell-wrapper').data('x', x).data('y', y);
+                            const wrapper = $('<div>').addClass('cell-wrapper').attr('data-x', x).attr('data-y', y);
                             $sublayer_cont.append(wrapper);
                         }
                         $sublayer_cont.append($('<br>'));
@@ -1122,6 +1122,16 @@
                         }
                         this.next_entity_sublayer.swap(x, y, res.type, res.state);
                     });
+                    $mouseclick_cont.children('.cell-wrapper').on('mouseenter', (e)=>{
+                        let x = $(e.target).data('x');
+                        let y = $(e.target).data('y');
+                        $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '0.2');
+                    });
+                    $mouseclick_cont.children('.cell-wrapper').on('mouseleave', (e)=>{
+                        let x = $(e.target).data('x');
+                        let y = $(e.target).data('y');
+                        $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '');
+                    });
                     $cont.append($grid_cont).append($entity_cont).append($item_cont).append($mouseclick_cont);
                     return $cont;
                 }
@@ -1180,11 +1190,16 @@
             $state_selector_cont.children('.state-enum').append($selector_layer_cont);
             $('#state-selector-cont').append($state_selector_cont);
 
+            let selected_states = new Map();
+
             selector_layer.on_mouse_place_entity = (inst)=>{
                 if (inst.type === entity_table.get('empty')){
                     return {
                         able: false
                     };
+                }
+                for (let [state_name, state_values] of inst.type.enum_states()){
+                    selected_states.set(state_name, inst.state[state_name]);
                 }
                 let [swap_out_type, swap_out_state] = hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
                 redraw_hand_and_selector();
@@ -1257,7 +1272,7 @@
                 {out: 'store_coal' ,in: [['iron_ingot', 6]]},
                 {out: 'store_iron' ,in: [['iron_ingot', 6]]},
             ];
-            let debug_crafting = false;
+            let debug_crafting = true;
             if (debug_crafting){
                 crafting_layer = new YardLayer(8, 10);
                 for (let [k, v] of entity_table){
@@ -1341,7 +1356,13 @@
                 if (can_craft(recipe.in).size == 0){
                     can_craft(recipe.in, true);
                     let out_type = entity_table.get(recipe.out);
-                    hand_layer.next_entity_sublayer.swap(0, 0, out_type, get_default_state(out_type));
+                    let state = get_default_state(out_type);
+                    for (let [k, v] of Object.entries(state)){
+                        if (selected_states.has(k)){
+                            state[k] = selected_states.get(k);
+                        }
+                    }
+                    hand_layer.next_entity_sublayer.swap(0, 0, out_type, state);
                     redraw_hand_and_selector();
                 }
                 return {able: false};
@@ -1352,29 +1373,7 @@
             crafting_layer.draw_all($crafting_cont);
 
 
-            ground_layer.next_item_sublayer.swap(1, 0, item_table.get('fire'), null);
-            ground_layer.next_item_sublayer.swap(1, 1, item_table.get('fire'), null);
-            ground_layer.next_item_sublayer.swap(0, 2, item_table.get('fire'), null);
-            ground_layer.next_item_sublayer.swap(1, 2, item_table.get('fire'), null);
-            ground_layer.next_item_sublayer.swap(1, 3, item_table.get('fire'), null);
-            ground_layer.next_item_sublayer.swap(1, 4, item_table.get('fire'), null);
-            ground_layer.next_entity_sublayer.swap(1, 0, entity_table.get('belt'), {dir: 3});
-            ground_layer.next_entity_sublayer.swap(1, 1, entity_table.get('belt'), {dir: 3});
-            ground_layer.next_entity_sublayer.swap(0, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(1, 3, entity_table.get('belt'), {dir: 0});
-            ground_layer.next_entity_sublayer.swap(1, 4, entity_table.get('belt'), {dir: 0});
-            ground_layer.next_entity_sublayer.swap(1, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(2, 2, entity_table.get('belt'), {dir: 2});
-            ground_layer.next_entity_sublayer.swap(3, 2, entity_table.get('steam_gen'), {dir: 2});
-            let bi = ground_layer.next_entity_sublayer.get_inst(3, 2)
-            bi.type.init_other_states(bi.state);
-            ground_layer.next_entity_sublayer.swap(4, 2, entity_table.get('belt'), {dir: 3});
-            let bi1 = ground_layer.next_entity_sublayer.get_inst(4, 2)
-            bi1.type.init_other_states(bi1.state);
-            ground_layer.next_entity_sublayer.swap(4, 3, entity_table.get('belt'), {dir: 3});
-            ground_layer.next_entity_sublayer.swap(4, 4, entity_table.get('ladder'));
-            ground_layer.next_entity_sublayer.swap(5, 4, entity_table.get('router'), {hv: 0});
-            ground_layer.next_entity_sublayer.swap(6, 4, entity_table.get('filter'), {dir: 0, filter_inited:false, filter_item_type:null});
+            
             ground_layer.draw_all($layer_cont);
             let ikk = -1;
             $('body').append('<input type="text" id="spawn">');
@@ -1466,6 +1465,19 @@
                     - 太阳（产生光，1s随机地点产生12个光）
                 世界场景：自己的家里面、院子（可以自由放东西的地图，有2层）/邻居、商店（只是可以交互的场景）/手（一格空间可以存物品）
                 剧情邻居人物：赵犰狳、钱蝙蝠、孙骆驼、李蜻蜓、...
+
+                短期TODO:
+                    - [x] 鼠标指到物品上会隐藏
+                    - 动态实体描述
+                    - 合成器、钻头等等实体的状态贴图或进度条
+                    - 日夜循环，白天没太阳
+                    - 只有下层能挖矿
+                    - 商店不能动
+                    - 电表插座
+                    - 背景图
+                    - 移动视角
+                    - 放大缩小画面
+                    - 扩大物品栏面积
 
                 DLC或更新：
                 - 钻头效应变化
