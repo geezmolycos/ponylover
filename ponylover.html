@@ -504,12 +504,27 @@
                 }
                 draw(inst){
                     let rotation = ['0deg', '270deg', '90deg', '180deg'][inst.state.dir];
-                    return $('<div>')
+                    let div = $('<div>')
                         .css('background-image', `url('${this.icon}')`)
                         .css('background-size', '512px 512px')
                         .css('width', '100%').css('height', '100%')
                         .css('transform', `rotate(${rotation})`)
                         .css('background-position', `-${this.pos_x * 32}px -${this.pos_y * 32}px`);
+                    let progress = $('<div>')
+                        .css('position', 'absolute')
+                        .css('width', '24px')
+                        .css('height', '2px')
+                        .css('top', '28px')
+                        .css('left', '2px')
+                        .css('border-left', '2px solid black')
+                        .css('border-right', '2px solid black');
+                    let bar = $('<div>')
+                        .css('width', `${24*inst.state.cooldown_ticks / this.cooldown_ticks}px`)
+                        .css('height', '2px')
+                        .css('background-color', 'red');
+                    progress.append(bar);
+                    div.append(progress);
+                    return div;
                 }
                 info(inst){
                     let $e = $('<span>');
@@ -785,6 +800,7 @@
                             return type === item_table.get('elec') ? 1 : -1;
                         }
                     }
+
                     e.basicinfo = (inst)=>("铀离心机，将铀矿处理为可供给反应堆的铀锭。");
                     e.ing_names = (inst)=>(["铀矿", '电']);
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=10; return e
@@ -902,13 +918,39 @@
                             }
                         }
                     }
-                    e.basicinfo = (inst)=>("挖矿钻头，只能在地下工作，依照所处的位置不同，可能挖出铁矿或煤。");
+                    var original_tick = e.tick.bind(e);
+                    e.tick = (inst)=>{
+                        if (inst.layer.is_underground){
+                            original_tick(inst);
+                        }
+                    }
+                    e.basicinfo = (inst)=>{
+                        let s = "挖矿钻头，只能在地下工作，依照所处的位置不同，可能挖出铁矿或煤。";
+                        if (inst.layer.is_underground){
+                            return s;
+                        } else {
+                            return s + '<br><br> <span style="color: red;">不能在地表工作</span>';
+                        }
+                    };
                     e.ing_names = (inst)=>(['电']);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
                 ['uran_drill', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : (type == item_table.get('iron_ingot') ? 1 : -1)), [6, 12], item_table.get('uran_ore'), null, 24, 480);
-                    e.basicinfo = (inst)=>("深层挖矿钻头，只能在地下工作，需要消耗铁锭，能够挖出铀矿。");
+                    var original_tick = e.tick.bind(e);
+                    e.tick = (inst)=>{
+                        if (inst.layer.is_underground){
+                            original_tick(inst);
+                        }
+                    }
+                    e.basicinfo = (inst)=>{
+                        let s = "深层挖矿钻头，只能在地下工作，需要消耗铁锭，能够挖出铀矿。";
+                        if (inst.layer.is_underground){
+                            return s;
+                        } else {
+                            return s + '<br><br> <span style="color: red;">不能在地表工作</span>';
+                        }
+                    };
                     e.ing_names = (inst)=>(['电', '铁锭']);
                     e.icon='./texture.png'; e.pos_x=1; e.pos_y=11; return e
                 })()],
@@ -950,18 +992,21 @@
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [2], item_table.get('food'), null, 1, 100);
                     e.basicinfo = (inst)=>("商店，在这里可以买食物。");
                     e.ing_names = (inst)=>(['钱币']);
+                    e.can_be_moved = (inst)=>{return false;}
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
                 ['store_coal', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('coal'), null, 1, 100);
                     e.basicinfo = (inst)=>("商店，在这里可以买煤。");
                     e.ing_names = (inst)=>(['钱币']);
+                    e.can_be_moved = (inst)=>{return false;}
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
                 ['store_iron', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [3], item_table.get('iron'), null, 1, 100);
                     e.basicinfo = (inst)=>("商店，在这里可以买铁锭。");
                     e.ing_names = (inst)=>(['钱币']);
+                    e.can_be_moved = (inst)=>{return false;}
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
                 })()],
             ]);
@@ -1039,6 +1084,7 @@
                     this.next_item_sublayer = new YardSubLayer(this, item_table.get('empty'));
                     this.item_changed = new Array(this.width * this.height).fill(false);
                     this.time = 0;
+                    this.daynight = 0; // 0~0.5: day, 0.5~1: night
                 }
 
                 get_entity_changed(x, y){
@@ -1125,6 +1171,7 @@
                     this.entity_sublayer.state = new Map(this.next_entity_sublayer.state);
                     this.entity_changed.fill(false);
                     this.time++;
+                    this.daynight = this.time / 20 / 120;
                 }
 
                 tick_at(x, y){
@@ -1228,6 +1275,8 @@
             let underground_layer = new YardLayer(12, 8);
             ground_layer.ladder_layer = underground_layer;
             underground_layer.ladder_layer = ground_layer;
+            ground_layer.is_underground = false;
+            underground_layer.is_underground = true;
 
             ground_layer.on_mouse_place_entity = underground_layer.on_mouse_place_entity = (inst)=>{
                 if (!inst.type.can_be_moved(inst)){
@@ -1612,10 +1661,10 @@
                 短期TODO:
                     - [x] 鼠标指到物品上会隐藏
                     - [x] 动态实体描述
-                    - 合成器、钻头等等实体的状态贴图或进度条
+                    - [x] 合成器、钻头等等实体的状态贴图或进度条
                     - 日夜循环，白天没太阳
-                    - 只有下层能挖矿
-                    - 商店不能动
+                    - [x] 只有下层能挖矿
+                    - [x] 商店不能动
                     - 电表插座
                     - 背景图
                     - 移动视角

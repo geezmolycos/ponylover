@@ -8,7 +8,8 @@
             "type": "chrome",
             "request": "launch",
             "name": "Open ponylover.html",
-            "file": "d:\\work\\ponylover\\ponylover.html"
+            "file": "d:\\work\\ponylover\\ponylover.html",
+            "runtimeExecutable": "C:\\Users\\geezmolycos\\AppData\\Local\\Thorium\\Application\\thorium.exe"
         }
     ]
 }
