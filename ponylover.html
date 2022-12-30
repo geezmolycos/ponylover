@@ -209,6 +209,8 @@
                         new_prompt.css('opacity', parseFloat(new_prompt.css('opacity')) - 0.1);
                         if (parseFloat(new_prompt.css('opacity')) > 0){
                             setTimeout(f, 100);
+                        } else {
+                            new_prompt.remove();
                         }
                     }
                     setTimeout(f, 100);
