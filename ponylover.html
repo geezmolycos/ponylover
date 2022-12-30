@@ -51,6 +51,7 @@
 
             #game-cont {
                 border: 2px dashed black;
+                padding: 12px;
                 box-sizing: border-box;
                 display: inline-block;
                 text-align: initial;
@@ -63,6 +64,7 @@
             #title-cont {
                 text-align: center;
                 font-size: larger;
+                margin: 12px;
             }
 
             #yard-cont, #op-cont, #handinfo-cont{
@@ -99,6 +101,13 @@
             .ground-layer-cont .grid-cont .cell-wrapper{
                 border-top: var(--game-grid-border) solid gray;
                 border-left: var(--game-grid-border) solid gray;
+            }
+
+            .grid-title {
+                border-top: var(--game-grid-border) solid gray;
+                border-left: var(--game-grid-border) solid gray;
+                border-right: var(--game-grid-border) solid gray;
+                text-align: center;
             }
 
             .underground-layer-cont .grid-cont{
@@ -144,26 +153,68 @@
                 border: 3px solid orange;
             }
 
+            #info-cont{
+                margin: 4px;
+                font-size: small;
+            }
+
         </style>
     </head>
     <body>
         <div id="game-center">
             <div id="game-cont">
-                <div id="title-cont">꒰ა ♡爱我的六色马可以做什么事♡ ໒꒱</div>
+                <div id="title-cont">···==···꒰ა ♡爱我的六色马可以做什么事♡ ໒꒱···==···</div>
                 <div id="main-cont">
-                    <div id="yard-cont"></div>
+                    <div id="yard-cont"><div class="grid-title">—— 地图 ——</div></div>
                     <div id="handinfo-cont">
-                        <div id="hand-cont"></div>
+                        <div id="hand-cont"><div class="grid-title">—— 物品栏 ——</div></div>
                         <div id="info-cont"></div>
                         <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button></div>
                     </div>
                     <div id="op-cont">
-                        <div id="state-selector-cont"></div>
-                        <div id="crafting-cont"></div>
+                        <div id="state-selector-cont"><div class="grid-title">—— 物体设置 ——</div></div>
+                        <div id="crafting-cont"><div class="grid-title">—— 合成 ——</div></div>
                     </div>
                 </div>
                 <div id="footer-cont"></div>
             </div>
+            <div id="prompt-container"></div>
+            <style>
+                .prompt {
+                    position: fixed;
+                    user-select: none;
+                    font-size: small;
+                    background-color: aliceblue;
+                    pointer-events: none;
+                }
+            </style>
+            <script>
+                var mouse_x = null;
+                var mouse_y = null;
+                    
+                document.addEventListener('mousemove', onMouseUpdate, false);
+                document.addEventListener('mouseenter', onMouseUpdate, false);
+                    
+                function onMouseUpdate(e) {
+                    mouse_x = e.pageX;
+                    mouse_y = e.pageY;
+                }
+                function show_prompt(text){
+                    let new_prompt = $('<div>')
+                        .addClass('prompt').append(text);
+                    $('#prompt-container').append(new_prompt);
+                    new_prompt.css('left', mouse_x - new_prompt.innerWidth() / 2 + 'px').css('top', mouse_y- new_prompt.innerHeight() / 2 + 'px').css('opaque', '1');
+                    let f = ()=>{
+                        new_prompt.css('top', parseFloat(new_prompt.css('top')) - 2 + 'px');
+                        new_prompt.css('opacity', parseFloat(new_prompt.css('opacity')) - 0.1);
+                        if (parseFloat(new_prompt.css('opacity')) > 0){
+                            setTimeout(f, 100);
+                        }
+                    }
+                    setTimeout(f, 100);
+                }
+
+            </script>
         </div>
         <div>
             <button id="advance">advance</button>
@@ -536,7 +587,7 @@
                     if (this.ing_names){
                         ing_names = this.ing_names(inst);
                     }
-                    $e.append('原料: ')
+                    $e.append('输入原料: ')
                     $e.append($('<br>'));
                     for (let i in ing_names){
                         let name = ing_names[i];
@@ -886,7 +937,7 @@
                         }
                     }
                     e.basicinfo = (inst)=>("反时空界面，解构微虫洞内部的空间结构，利用时空的展开获取巨大能量，放出电能和热能。");
-                    e.ing_names = (inst)=>(['电', '光']);
+                    e.ing_names = (inst)=>(['微虫洞']);
                     e.icon='./texture.png'; e.pos_x=7; e.pos_y=10; return e
                 })()],
                 ['coin_maker', (()=>{
@@ -1299,7 +1350,7 @@
             $('#yard-cont').append($layer_cont);
             $('#yard-cont').append($underground_layer_cont);
 
-            let hand_layer = new YardLayer(3, 2);
+            let hand_layer = new YardLayer(6, 1);
             hand_layer.get_entity_inst = function(){
                 return this.next_entity_sublayer.get_inst(0, 0);
             }
@@ -1374,7 +1425,7 @@
                 return true;
             }
 
-            $('#hand-cont').append($('<div>').addClass('hand-main-indicator'))
+            $('#hand-cont .layer-cont').append($('<div>').addClass('hand-main-indicator'))
 
             let $state_selector_cont = $('<div>').addClass('state-selector-cont');
             $('#info-cont').append($('<div>').addClass('item-info'));
@@ -1445,7 +1496,7 @@
                 {out: 'farm' ,in: [['food', 12]]},
                 {out: 'magnifier' ,in: [['iron_ingot', 6], ['coal', 3]]},
                 {out: 'lightbulb' ,in: [['iron_ingot', 6], ['coal', 3]]},
-                {out: 'led' ,in: [['iron_ingot', 6], ['coal', 3], ['lead', 2]]},
+                {out: 'led' ,in: [['iron_ingot', 6], ['coal', 3], ['lead_ingot', 2]]},
                 {out: 'elec_furnace' ,in: [['iron_ingot', 24], ['coal', 12]]},
                 {out: 'uran_furnace' ,in: [['iron_ingot', 24], ['coal', 12]]},
                 {out: 'battery' ,in: [['coal', 24]]},
@@ -1458,8 +1509,8 @@
                 {out: 'coin_maker' ,in: [['iron_ingot', 12], ['coal', 12]]},
                 {out: 'drill' ,in: [['iron_ingot', 24]]},
                 {out: 'uran_drill' ,in: [['iron_ingot', 24]]},
-                {out: 'antimatter_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead', 12], ['anti_iron_ingot', 4]]},
-                {out: 'wormhole_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead', 12], ['wormhole', 4]]},
+                {out: 'antimatter_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead_ingot', 12], ['anti_iron_ingot', 4]]},
+                {out: 'wormhole_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead_ingot', 12], ['wormhole', 4]]},
                 {out: 'store_food' ,in: [['iron_ingot', 6]]},
                 {out: 'store_coal' ,in: [['iron_ingot', 6]]},
                 {out: 'store_iron' ,in: [['iron_ingot', 6]]},
@@ -1478,6 +1529,30 @@
 
             let ground_crafting_region = {
                 xa: 0, ya: 0, xb: 3, yb: 2
+            }
+
+            crafting_layer.layer_specific_info = function (inst){
+                let i = inst.layer.xy2i(inst.x, inst.y);
+                let recipe = crafting_recipes_positioned.get(i);
+                if (!recipe){
+                    return null;
+                }
+                let text = $('<div>');
+                text.append('合成原料：');
+                text.append('<br>');
+                let still_need = can_craft(recipe.in);
+                for (let [type_id, count] of recipe.in){
+                    let type = item_table.get(type_id);
+                    text.append($('<div>')
+                        .css('background-image', `url('${type.icon}')`)
+                        .css('background-size', '256px 256px')
+                        .css('width', '100%').css('height', '100%')
+                        .css('background-position', `-${type.pos_x * 16}px -${type.pos_y * 16}px`)
+                        .css('width', '16px').css('height', '16px')
+                        .addClass('cell-wrapper'));
+                    text.append(`(${count - (still_need.get(type) || 0)}/${count}); `);
+                }
+                return text;
             }
 
             function get_default_state(entity_type){
@@ -1543,6 +1618,7 @@
                 let i = inst.layer.xy2i(inst.x, inst.y);
                 let recipe = crafting_recipes_positioned.get(i);
                 if (!hand_has_space()){
+                    show_prompt('物品栏已满');
                     return {able: false};
                 }
                 if (can_craft(recipe.in).size == 0){
@@ -1556,6 +1632,9 @@
                     }
                     hand_autoinsert(out_type, state);
                     redraw_hand_and_selector();
+                    show_prompt('+1');
+                } else {
+                    show_prompt('材料不足');
                 }
                 return {able: false};
             }
@@ -1582,6 +1661,7 @@
                     underground_layer.draw_all($underground_layer_cont);
                 }, 50);
             });
+            $('#advance').click();
             $('#stop').on('click', (e)=>{
                 clearInterval(ikk);
             });
