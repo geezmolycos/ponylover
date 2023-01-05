@@ -73,9 +73,7 @@
             }
 
             #yard-cont {
-                width: calc(var(--game-grid-size) * 12 + var(--game-grid-border));
-                height: calc(var(--game-grid-size) * 8 + var(--game-grid-border));
-                overflow: hidden;
+                
             }
 
             #op-cont {
@@ -158,6 +156,48 @@
                 font-size: small;
             }
 
+            #yard-cont-inner{
+                position: relative;
+                width: calc(var(--game-grid-size) * 12 + var(--game-grid-border));
+                height: calc(var(--game-grid-size) * 8 + var(--game-grid-border));
+                /*overflow: hidden;*/
+            }
+
+            #yard-cont-inner .layer-cont {
+                z-index: 0;
+            }
+
+            #yard-cont-inner .move-yard {
+                z-index: 1;
+            }
+
+            .move-yard{
+                position: absolute;
+            }
+
+            .move-left {
+                left: 0;
+                height: 100%;
+                width: 12px;
+            }
+
+            .move-right {
+                right: 0;
+                height: 100%;
+                width: 12px;
+            }
+            .move-top {
+                top: 0;
+                width: 100%;
+                height: 12px;
+            }
+
+            .move-bottom {
+                bottom: 0;
+                width: 100%;
+                height: 12px;
+            }
+
         </style>
     </head>
     <body>
@@ -165,7 +205,15 @@
             <div id="game-cont">
                 <div id="title-cont">···==···꒰ა ♡爱我的六色马可以做什么事♡ ໒꒱···==···</div>
                 <div id="main-cont">
-                    <div id="yard-cont"><div class="grid-title">—— 地图 ——</div></div>
+                    <div id="yard-cont">
+                        <div class="grid-title">—— 地图 ——</div>
+                        <div id="yard-cont-inner">
+                            <div class="move-yard move-left" data-x="-1" data-y="0"></div>
+                            <div class="move-yard move-right" data-x="1" data-y="0"></div>
+                            <div class="move-yard move-top" data-x="0" data-y="-1"></div>
+                            <div class="move-yard move-bottom" data-x="0" data-y="1"></div>
+                        </div>
+                    </div>
                     <div id="handinfo-cont">
                         <div id="hand-cont"><div class="grid-title">—— 物品栏 ——</div></div>
                         <div id="info-cont"></div>
@@ -194,7 +242,7 @@
                     
                 document.addEventListener('mousemove', onMouseUpdate, false);
                 document.addEventListener('mouseenter', onMouseUpdate, false);
-                    
+                
                 function onMouseUpdate(e) {
                     mouse_x = e.pageX;
                     mouse_y = e.pageY;
@@ -234,6 +282,18 @@
                 tick(inst){}
                 draw(inst){}
                 info(inst){return '什么也没有';}
+                enum_states(){
+                    return [];
+                }
+                init_other_states(state){}
+            }
+
+            class WallEnt{
+                can_place_item_on(inst){return false;}
+                can_be_moved(inst){return false;}
+                tick(inst){}
+                draw(inst){}
+                info(inst){return '墙';}
                 enum_states(){
                     return [];
                 }
@@ -1082,11 +1142,13 @@
                     return [old_type, old_state];
                 }
 
-                make_cont(){
+                make_cont(width, height){
+                    if (!width) {width = this.layer.width}
+                    if (!height) {height = this.layer.height}
                     let $sublayer_cont = $('<div>').addClass('sublayer-cont');
-                    for (let y=0; y<this.layer.height; y++){
-                        for (let x=0; x<this.layer.width; x++){
-                            const wrapper = $('<div>').addClass('cell-wrapper').attr('data-x', x).attr('data-y', y);
+                    for (let y=0; y<height; y++){
+                        for (let x=0; x<width; x++){
+                            const wrapper = $('<div>').addClass('cell-wrapper').data('x', x).data('y', y);
                             $sublayer_cont.append(wrapper);
                         }
                         $sublayer_cont.append($('<br>'));
@@ -1244,12 +1306,14 @@
                     return null;
                 }
 
-                make_cont(callback_output_info, callback_clear_info){
+                make_cont(callback_output_info, callback_clear_info, width, height){
+                    if (!width){width = this.width}
+                    if (!height){height = this.height}
                     let $cont = $('<div>').addClass('layer-cont');
-                    let $grid_cont = this.entity_sublayer.make_cont().addClass('grid-cont');
-                    let $entity_cont = this.entity_sublayer.make_cont().addClass('entity-sublayer-cont');
-                    let $item_cont = this.item_sublayer.make_cont().addClass('item-sublayer-cont');
-                    let $mouseclick_cont = this.entity_sublayer.make_cont().addClass('mouseclick-cont');
+                    let $grid_cont = this.entity_sublayer.make_cont(width, height).addClass('grid-cont');
+                    let $entity_cont = this.entity_sublayer.make_cont(width, height).addClass('entity-sublayer-cont');
+                    let $item_cont = this.item_sublayer.make_cont(width, height).addClass('item-sublayer-cont');
+                    let $mouseclick_cont = this.entity_sublayer.make_cont(width, height).addClass('mouseclick-cont');
                     $mouseclick_cont.children('.cell-wrapper').on('click', (e)=>{
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
@@ -1262,10 +1326,11 @@
                     });
                     let task_id = null;
                     $mouseclick_cont.children('.cell-wrapper').on('mouseenter', (e)=>{
+                        let i = $(e.target).index();
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
-                        $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', 'rgba(255, 255, 0, 0.2)');
-                        $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '0.2');
+                        $($mouseclick_cont.children()[i]).css('background-color', 'rgba(255, 255, 0, 0.2)');
+                        $($item_cont.children()[i]).css('opacity', '0.2');
                         let f = ()=>{
                             let inst = this.next_entity_sublayer.get_inst(x, y);
                             if (callback_output_info){
@@ -1279,10 +1344,11 @@
                         task_id = setInterval(f, 200);
                     });
                     $mouseclick_cont.children('.cell-wrapper').on('mouseleave', (e)=>{
+                        let i = $(e.target).index();
                         let x = $(e.target).data('x');
                         let y = $(e.target).data('y');
-                        $mouseclick_cont.children(`[data-x=${x}][data-y=${y}]`).css('background-color', '');
-                        $item_cont.children(`[data-x=${x}][data-y=${y}]`).css('opacity', '');
+                        $($mouseclick_cont.children()[i]).css('background-color', '');
+                        $($item_cont.children()[i]).css('opacity', '');
                         clearInterval(task_id);
                         if (callback_clear_info){
                             callback_clear_info();
@@ -1324,8 +1390,8 @@
             }
             
         
-            let ground_layer = new YardLayer(12, 8);
-            let underground_layer = new YardLayer(12, 8);
+            let ground_layer = new YardLayer(96, 96);
+            let underground_layer = new YardLayer(96, 96);
             ground_layer.ladder_layer = underground_layer;
             underground_layer.ladder_layer = ground_layer;
             ground_layer.is_underground = false;
@@ -1347,10 +1413,10 @@
                 };
             }
             
-            let $layer_cont = ground_layer.make_cont(show_info, clear_and_show_hand).addClass('ground-layer-cont');
-            let $underground_layer_cont = underground_layer.make_cont(show_info, clear_and_show_hand).addClass('underground-layer-cont');
-            $('#yard-cont').append($layer_cont);
-            $('#yard-cont').append($underground_layer_cont);
+            let $layer_cont = ground_layer.make_cont(show_info, clear_and_show_hand, 12, 8).addClass('ground-layer-cont');
+            let $underground_layer_cont = underground_layer.make_cont(show_info, clear_and_show_hand, 12, 8).addClass('underground-layer-cont');
+            $('#yard-cont-inner').append($layer_cont);
+            $('#yard-cont-inner').append($underground_layer_cont);
 
             let hand_layer = new YardLayer(6, 1);
             hand_layer.get_entity_inst = function(){
@@ -1697,6 +1763,61 @@
             $('#flip-yard').on('click', (e)=>{
                 ground_visible = !ground_visible;
                 update_ground_visibility();
+            });
+
+            $('#yard-cont-inner .cell-wrapper').each((index, elem)=>{
+                elem = $(elem);
+                elem.data('ox', elem.data('x'));
+                elem.data('oy', elem.data('y'));
+            });
+
+            let yard_offset_x = 0;
+            let yard_offset_y = 0;
+
+            function restrict_yard_offset(){
+                if (yard_offset_x < 0){
+                    yard_offset_x = 0;
+                } else if (yard_offset_x > (ground_layer.height - 12)){
+                    yard_offset_x = ground_layer.height - 12;
+                }
+                if (yard_offset_y < 0){
+                    yard_offset_y = 0;
+                } else if (yard_offset_y > (ground_layer.height - 8)){
+                    yard_offset_y = ground_layer.height - 8;
+                }
+            }
+
+            function move_yard_update_tiles(){
+                $('#yard-cont-inner .cell-wrapper').each((index, elem)=>{
+                    elem = $(elem);
+                    elem.data('x', elem.data('ox') + yard_offset_x);
+                    elem.data('y', elem.data('oy') + yard_offset_y);
+                    // ground_layer.draw_all($layer_cont);
+                    // underground_layer.draw_all($underground_layer_cont);
+                });
+            }
+
+            let $mouseclick_cont = $('.mouseclick-cont');
+
+            let move_yard_timeout_id = null;
+
+            $('.move-yard').on('mouseenter', (e)=>{
+                // console.log('enter');
+                clearTimeout(move_yard_timeout_id);
+                let f = ()=>{
+                    yard_offset_x += $(e.target).data('x');
+                    yard_offset_y += $(e.target).data('y');
+                    restrict_yard_offset()
+                    move_yard_update_tiles();
+                    move_yard_timeout_id = setTimeout(f, 100);
+                };
+                move_yard_timeout_id = setTimeout(f, 300);
+            });
+            
+            $('.move-yard').on('mouseleave', (e)=>{
+                // console.log('leave');
+                clearTimeout(move_yard_timeout_id);
+                move_yard_timeout_id = null;
             });
 
         </script>
