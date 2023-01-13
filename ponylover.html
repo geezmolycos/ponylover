@@ -1774,6 +1774,14 @@
             let yard_offset_x = 0;
             let yard_offset_y = 0;
 
+            let $map_background = $('<div>');
+            $('#yard-cont-inner .ground-layer-cont').prepend($map_background);
+            $map_background.css('background-image', 'url("floor_ground.png")');
+            $map_background.css('background-size', '3264px 3264px');
+            $map_background.css('width', '100%').css('height', '100%');
+            $map_background.css('position', 'absolute');
+            $map_background.css('opacity', '0.5');
+
             function restrict_yard_offset(){
                 if (yard_offset_x < 0){
                     yard_offset_x = 0;
@@ -1795,6 +1803,7 @@
                     // ground_layer.draw_all($layer_cont);
                     // underground_layer.draw_all($underground_layer_cont);
                 });
+                $map_background.css('background-position', `-${yard_offset_x * 34}px -${yard_offset_y * 34}px`);
             }
 
             let $mouseclick_cont = $('.mouseclick-cont');
