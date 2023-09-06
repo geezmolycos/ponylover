@@ -158,8 +158,8 @@
 
             #yard-cont-inner{
                 position: relative;
-                width: calc(var(--game-grid-size) * 12 + var(--game-grid-border));
-                height: calc(var(--game-grid-size) * 8 + var(--game-grid-border));
+                width: calc(var(--game-grid-size) * 24 + var(--game-grid-border));
+                height: calc(var(--game-grid-size) * 16 + var(--game-grid-border));
                 /*overflow: hidden;*/
             }
 
@@ -217,7 +217,7 @@
                     <div id="handinfo-cont">
                         <div id="hand-cont"><div class="grid-title">—— 物品栏 ——</div></div>
                         <div id="info-cont"></div>
-                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button></div>
+                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button><!--button id="map-big-small" class="game-button">切换大小</button--></div>
                     </div>
                     <div id="op-cont">
                         <div id="state-selector-cont"><div class="grid-title">—— 物体设置 ——</div></div>
@@ -1383,6 +1383,9 @@
                 $('.item-info').empty();
             }
 
+            let yard_offset_x = 0;
+            let yard_offset_y = 0;
+
             function clear_and_show_hand(){
                 let entity_inst = hand_layer.get_entity_inst();
                 let info = entity_inst.type.info(entity_inst);
@@ -1391,6 +1394,8 @@
                 if (debug_tooltip){
                     $('.item-debug-state').empty();
                     $('.item-debug-state').append(JSON.stringify(entity_inst.state));
+                    $('.item-debug-state').append('\n');
+                    $('.item-debug-state').append(`offx=${yard_offset_x}, offy=${yard_offset_y}`);
                 }
             }
 
@@ -1442,8 +1447,8 @@
                 };
             }
             
-            let $layer_cont = ground_layer.make_cont(show_info, clear_and_show_hand, 12, 8).addClass('ground-layer-cont');
-            let $underground_layer_cont = underground_layer.make_cont(show_info, clear_and_show_hand, 12, 8).addClass('underground-layer-cont');
+            let $layer_cont = ground_layer.make_cont(show_info, clear_and_show_hand, 24, 16).addClass('ground-layer-cont');
+            let $underground_layer_cont = underground_layer.make_cont(show_info, clear_and_show_hand, 24, 16).addClass('underground-layer-cont');
             $('#yard-cont-inner').append($layer_cont);
             $('#yard-cont-inner').append($underground_layer_cont);
 
@@ -1794,14 +1799,25 @@
                 update_ground_visibility();
             });
 
+            function resize_map(width, height){
+                
+            }
+            
+            let is_map_small = true;
+            $('#map-big-small').on('click', (e)=>{
+                if (is_map_small){
+                    resize_map(24, 16);
+                } else {
+                    resize_map(12, 8);
+                }
+                is_map_small = !is_map_small;
+            });
+
             $('#yard-cont-inner .cell-wrapper').each((index, elem)=>{
                 elem = $(elem);
                 elem.data('ox', elem.data('x'));
                 elem.data('oy', elem.data('y'));
             });
-
-            let yard_offset_x = 0;
-            let yard_offset_y = 0;
 
             let $map_background = $('<div>');
             $('#yard-cont-inner .ground-layer-cont').prepend($map_background);
@@ -1814,13 +1830,13 @@
             function restrict_yard_offset(){
                 if (yard_offset_x < 0){
                     yard_offset_x = 0;
-                } else if (yard_offset_x > (ground_layer.width - 12)){
-                    yard_offset_x = ground_layer.width - 12;
+                } else if (yard_offset_x > (ground_layer.width - 24)){
+                    yard_offset_x = ground_layer.width - 24;
                 }
                 if (yard_offset_y < 0){
                     yard_offset_y = 0;
-                } else if (yard_offset_y > (ground_layer.height - 8)){
-                    yard_offset_y = ground_layer.height - 8;
+                } else if (yard_offset_y > (ground_layer.height - 16)){
+                    yard_offset_y = ground_layer.height - 16;
                 }
             }
 
@@ -1905,7 +1921,16 @@
             ground_layer.next_entity_sublayer.swap(6, 21, entity_table.get('store_iron'), get_default_state(entity_table.get('store_iron')));
             ground_layer.next_entity_sublayer.swap(42, 16, entity_table.get('elec_meter'), Object.assign(get_default_state(entity_table.get('elec_meter')), {dir: 1}));
             
+            // 电动车充电器
+            ground_layer.next_entity_sublayer.swap(21, 20, entity_table.get('coin_maker'), Object.assign(get_default_state(entity_table.get('coin_maker')), {dir: 3}));
             
+            // 初始提供一些传送带
+            for (let y=18; y<21; y++){
+            for (let x=12; x<20; x++){
+                ground_layer.next_entity_sublayer.swap(x, y, entity_table.get('belt'), Object.assign(get_default_state(entity_table.get('belt')), {dir: 1}));
+            }
+            }
+
             // 车
             let $car_div = $('<div>');
             $car_div
@@ -1931,7 +1956,6 @@
                     let ry = Math.floor(Math.random() * (10-1)+1);
                     if (
                         ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
-                     && ground_layer.next_entity_sublayer.get_inst(rx, ry).type === entity_table.get('empty')
                     ){
                         // 设置光线
                         ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('light'), null);
@@ -1943,9 +1967,8 @@
                     let ry = Math.floor(Math.random() * (26-24)+24);
                     if (
                         ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
-                     && ground_layer.next_entity_sublayer.get_inst(rx, ry).type === entity_table.get('empty')
                     ){
-                        // 设置光线
+                        // 设置钱
                         ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('coin'), null);
                     }
                 }
