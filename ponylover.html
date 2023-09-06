@@ -274,6 +274,9 @@
         <script>
             'use strict'
 
+            let global_debug = true;
+            let debug_tooltip = global_debug;
+
             const cardinal = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 
             class EmptyEnt{
@@ -292,8 +295,12 @@
                 can_place_item_on(inst){return false;}
                 can_be_moved(inst){return false;}
                 tick(inst){}
-                draw(inst){}
-                info(inst){return '墙';}
+                draw(inst){
+                        // return $('<div>')
+                        //     .css('width', `100%`).css('height', '100%')
+                        //     .css('background-color', `#ff0000`);
+                }
+                info(inst){return '这个地方已经被地上的物体占用，不能放机器';}
                 enum_states(){
                     return [];
                 }
@@ -780,12 +787,7 @@
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=9;
                     e.info = (inst)=>(
                         $('<span>')
-                            .append('过滤器，记住其上的第一个物品，使此类物品通过，其他物品分流至两侧。')
-                            .append($('<br><br>'))
-                            .append('更改方向后会自动清除物品')
-                            .append($('<br><br>'))
-                            .append(inst.state.filter_inited ? '当前物品: ' : '当前没有物品')
-                            .append(inst.state.filter_inited ? inst.state.filter_item_type.draw(null) : null));
+                            .append('抬升机，依靠重力带动发电机发电。'));
                     return e
                 })()],
                 ['villager', (()=>{
@@ -1008,6 +1010,13 @@
                     e.ing_names = (inst)=>(['电']);
                     e.icon='./texture.png'; e.pos_x=0; e.pos_y=11; return e
                 })()],
+                ['elec_meter', (()=>{
+                    let e = new MachineEnt((type, state)=>(type == item_table.get('coin') ? 0 : -1), [1], item_table.get('elec'), null, 12, 120);
+                    e.can_be_moved = (inst) => {return false;};
+                    e.basicinfo = (inst)=>("电表，输入钱就可以买电");
+                    e.ing_names = (inst)=>(['钱币']);
+                    e.icon='./texture.png'; e.pos_x=5; e.pos_y=11; return e
+                })()],
                 ['drill', (()=>{
                     let e = new MachineEnt((type, state)=>(type == item_table.get('elec') ? 0 : -1), [6], item_table.get('empty'), null, 24, 120);
                     e.mine = (inst) => {
@@ -1121,6 +1130,10 @@
                     e.ing_names = (inst)=>(['钱币']);
                     e.can_be_moved = (inst)=>{return false;}
                     e.icon='./texture.png'; e.pos_x=4; e.pos_y=11; return e
+                })()],
+                ['wall', (()=>{
+                    let e = new WallEnt();
+                    return e
                 })()],
             ]);
 
@@ -1366,9 +1379,6 @@
                 }
             }
 
-            let global_debug = true;
-            let debug_tooltip = global_debug;
-
             function clear_info(){
                 $('.item-info').empty();
             }
@@ -1390,8 +1400,8 @@
             }
             
         
-            let ground_layer = new YardLayer(96, 96);
-            let underground_layer = new YardLayer(96, 96);
+            let ground_layer = new YardLayer(52, 36);
+            let underground_layer = new YardLayer(52, 36);
             ground_layer.ladder_layer = underground_layer;
             underground_layer.ladder_layer = ground_layer;
             ground_layer.is_underground = false;
@@ -1402,6 +1412,25 @@
                     return {
                         able: false
                     };
+                }
+                if (inst.layer.hand_layer.next_entity_sublayer.get_inst(0, 0).type === entity_table.get('ladder')){
+                    // 梯子只能放到指定位置
+                    if (23 <= inst.x && inst.x <= 47 && 1 <= inst.y && inst.y <= 9){
+                        // pass
+                        // 后院
+                    } else if (14 <= inst.x && inst.x <= 21 && 3 <= inst.y && inst.y <= 8){
+                        // pass
+                        // 合成空间的小区域
+                    } else {
+                        let hash = (53 + inst.y * 101) * 53 + inst.x * 101;
+                        let m = hash % 32; // 随机位置
+                        if (m > 20){
+                            show_prompt('地面太硬挖不了洞，不能放梯子');
+                            return {
+                                able: false
+                            }
+                        }
+                    }
                 }
                 let [swap_out_type, swap_out_state] = inst.layer.hand_layer.next_entity_sublayer.swap(0, 0, inst.type, inst.state);
                 hand_autosupply();
@@ -1596,7 +1625,7 @@
             let crafting_recipes_positioned = new Map();
 
             let ground_crafting_region = {
-                xa: 0, ya: 0, xb: 3, yb: 2
+                xa: 1, ya: 1, xb: 20, yb: 16
             }
 
             crafting_layer.layer_specific_info = function (inst){
@@ -1785,8 +1814,8 @@
             function restrict_yard_offset(){
                 if (yard_offset_x < 0){
                     yard_offset_x = 0;
-                } else if (yard_offset_x > (ground_layer.height - 12)){
-                    yard_offset_x = ground_layer.height - 12;
+                } else if (yard_offset_x > (ground_layer.width - 12)){
+                    yard_offset_x = ground_layer.width - 12;
                 }
                 if (yard_offset_y < 0){
                     yard_offset_y = 0;
@@ -1828,6 +1857,67 @@
                 clearTimeout(move_yard_timeout_id);
                 move_yard_timeout_id = null;
             });
+
+            // 放墙
+
+            function ground_put_wall(x1, y1, x2, y2){
+                for (let y=y1; y<=y2; y++){
+                    for (let x=x1; x<=x2; x++){
+                        ground_layer.next_entity_sublayer.swap(x, y, entity_table.get('wall'), null);
+                    }
+                }
+            }
+
+            // 左下小屋子
+            ground_put_wall(1, 18, 1, 23);
+            ground_put_wall(1, 18, 8, 18);
+            ground_put_wall(8, 18, 8, 23);
+
+            // 房屋外墙壁
+            ground_put_wall(22, 0, 48, 0);
+            ground_put_wall(22, 0, 22, 20);
+            ground_put_wall(48, 0, 48, 20);
+            ground_put_wall(22, 20, 42, 20);
+
+            // 屋内墙
+            ground_put_wall(23, 10, 24, 10);
+            ground_put_wall(28, 10, 36, 10);
+            ground_put_wall(40, 10, 42, 10);
+            ground_put_wall(42, 10, 42, 16);
+            ground_put_wall(42, 19, 42, 19);
+            ground_put_wall(30, 11, 32, 11);
+            ground_put_wall(23, 13, 25, 14);
+            ground_put_wall(23, 16, 26, 17);
+            ground_put_wall(27, 17, 31, 17);
+            ground_put_wall(30, 15, 34, 16);
+            ground_put_wall(30, 14, 31, 14);
+
+            // 后院树石头
+            ground_put_wall(35, 3, 36, 3);
+            ground_put_wall(42, 5, 44, 8);
+            ground_put_wall(41, 6, 41, 7);
+
+            // 商店
+
+            ground_layer.next_entity_sublayer.swap(2, 21, entity_table.get('store_food'), get_default_state(entity_table.get('store_food')));
+            ground_layer.next_entity_sublayer.swap(4, 21, entity_table.get('store_coal'), get_default_state(entity_table.get('store_coal')));
+            ground_layer.next_entity_sublayer.swap(6, 21, entity_table.get('store_iron'), get_default_state(entity_table.get('store_iron')));
+            ground_layer.next_entity_sublayer.swap(42, 16, entity_table.get('elec_meter'), Object.assign(get_default_state(entity_table.get('elec_meter')), {dir: 1}));
+            
+            // 太阳产生光线
+
+            let orig_tick_all = ground_layer.tick_all;
+            ground_layer.tick_all = function() {
+                orig_tick_all.apply(this);
+                if (Math.random() < 0.1){
+                    let rx = Math.floor(Math.random() * (48-23)+23);
+                    let ry = Math.floor(Math.random() * (10-1)+1);
+                    if (ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')){
+                        // 设置光线
+                        ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('light'), null);
+                    }
+                }
+            }
 
         </script>
         <script>
@@ -1877,9 +1967,9 @@
                     - 日夜循环，白天没太阳
                     - [x] 只有下层能挖矿
                     - [x] 商店不能动
-                    - 电表插座
-                    - 背景图
-                    - 移动视角
+                    - [x]电表插座
+                    - [x]背景图
+                    - [x]移动视角
                     - 放大缩小画面
                     - [x] 扩大物品栏面积
 
