@@ -1608,9 +1608,9 @@
                 {out: 'uran_drill' ,in: [['iron_ingot', 24]]},
                 {out: 'antimatter_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead_ingot', 12], ['anti_iron_ingot', 4]]},
                 {out: 'wormhole_enricher' ,in: [['iron_ingot', 144], ['coal', 144], ['lead_ingot', 12], ['wormhole', 4]]},
-                {out: 'store_food' ,in: [['iron_ingot', 6]]},
-                {out: 'store_coal' ,in: [['iron_ingot', 6]]},
-                {out: 'store_iron' ,in: [['iron_ingot', 6]]},
+                // {out: 'store_food' ,in: [['iron_ingot', 6]]},
+                // {out: 'store_coal' ,in: [['iron_ingot', 6]]},
+                // {out: 'store_iron' ,in: [['iron_ingot', 6]]},
             ];
             let debug_crafting = global_debug;
             if (debug_crafting){
@@ -1824,6 +1824,7 @@
                 }
             }
 
+
             function move_yard_update_tiles(){
                 $('#yard-cont-inner .cell-wrapper').each((index, elem)=>{
                     elem = $(elem);
@@ -1904,17 +1905,75 @@
             ground_layer.next_entity_sublayer.swap(6, 21, entity_table.get('store_iron'), get_default_state(entity_table.get('store_iron')));
             ground_layer.next_entity_sublayer.swap(42, 16, entity_table.get('elec_meter'), Object.assign(get_default_state(entity_table.get('elec_meter')), {dir: 1}));
             
-            // 太阳产生光线
+            
+            // 车
+            let $car_div = $('<div>');
+            $car_div
+                .css('width', '100%').css('height', '100%')
+                .css('position', 'absolute')
+                .css('background-image', 'url("car.png")')
+                .css('background-size', '64px 64px')
+                .css('background-repeat', 'no-repeat')
+                .css('background-position', '-100px -100px');
+            $('#yard-cont .ground-layer-cont>:first-child').after($car_div);
 
+            let car_present = false;
+            let car_x = 0;
+            let car_y = 0;
+            let car_speed = 0.3;
+            
             let orig_tick_all = ground_layer.tick_all;
             ground_layer.tick_all = function() {
+                // 太阳产生光线
                 orig_tick_all.apply(this);
                 if (Math.random() < 0.1){
                     let rx = Math.floor(Math.random() * (48-23)+23);
                     let ry = Math.floor(Math.random() * (10-1)+1);
-                    if (ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')){
+                    if (
+                        ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
+                     && ground_layer.next_entity_sublayer.get_inst(rx, ry).type === entity_table.get('empty')
+                    ){
                         // 设置光线
                         ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('light'), null);
+                    }
+                }
+                // 人行道产生钱币
+                if (Math.random() < 0.001){
+                    let rx = Math.floor(Math.random() * (52)+0);
+                    let ry = Math.floor(Math.random() * (26-24)+24);
+                    if (
+                        ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
+                     && ground_layer.next_entity_sublayer.get_inst(rx, ry).type === entity_table.get('empty')
+                    ){
+                        // 设置光线
+                        ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('coin'), null);
+                    }
+                }
+                
+                if (car_x > 52){
+                    car_present = false;
+                    $car_div.css('background-position', `-100px -100px`);
+                }
+                if (car_present){
+                    car_x += car_speed;
+                    // 车撞坏建筑
+                    if (Math.random() < 0.1){
+                        if (ground_layer.next_item_sublayer.get_inst(Math.floor(car_x+1), Math.floor(car_y+1)).type !== item_table.get('empty')){
+                            ground_layer.next_item_sublayer.swap(Math.floor(car_x+1), Math.floor(car_y+1), item_table.get('fire'), null);
+                        }
+                        if (ground_layer.next_entity_sublayer.get_inst(Math.floor(car_x+1), Math.floor(car_y+1)).type !== entity_table.get('empty')){
+                            ground_layer.next_entity_sublayer.swap(Math.floor(car_x+1), Math.floor(car_y+1), entity_table.get('empty'), null);
+                            ground_layer.next_item_sublayer.swap(Math.floor(car_x+1), Math.floor(car_y+1), item_table.get('fire'), null);
+                        }
+                    }
+                    // render car
+                    $car_div.css('background-position', `${-(yard_offset_x-car_x) * 34}px ${-(yard_offset_y-car_y) * 34}px`);
+                } else {
+                    if (Math.random() < 0.001){
+                        car_present = true;
+                        car_x = -3;
+                        car_y = Math.random()*(33-2-26)+26;
+                        $car_div.css('filter', `hue-rotate(${Math.random()*360}deg)`); // random color
                     }
                 }
             }
