@@ -6,6 +6,44 @@
             src="https://code.jquery.com/jquery-3.6.0.min.js"
             integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
             crossorigin="anonymous"></script>
+        <script src="./player-small.js"></script>
+        <script src="./song.js"></script>
+        <script type="text/javascript">
+            function startMusic() {
+              //----------------------------------------------------------------------------
+              // Demo program section
+              //----------------------------------------------------------------------------
+            
+              // Initialize music generation (player).
+              var t0 = new Date();
+              var player = new CPlayer();
+              player.init(song);
+            
+              // Generate music...
+              var done = false;
+              let musicInterval = setInterval(function () {
+                if (done) {
+                    clearInterval(musicInterval);
+                  return;
+                }
+            
+                done = player.generate() >= 1;
+            
+                if (done) {
+                  var t1 = new Date();
+            
+                  // Put the generated song in an Audio element.
+                  var wave = player.createWave();
+                  var audio = document.createElement("audio");
+                  audio.src = URL.createObjectURL(new Blob([wave], {type: "audio/wav"}));
+                  audio.loop = true;
+                  audio.volume = 0.2;
+                  audio.play();
+                  window.bgm = audio;
+                }
+              }, 0);
+            }
+        </script>
         <style>
             :root {
                 --game-grid-size: 34px;
@@ -217,7 +255,7 @@
                     <div id="handinfo-cont">
                         <div id="hand-cont"><div class="grid-title">—— 物品栏 ——</div></div>
                         <div id="info-cont"></div>
-                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button>　　<button id="save" class="game-button">保存</button><button id="clear-save" class="game-button">重置</button></div>
+                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button>　　<button id="save" class="game-button">保存</button><button id="clear-save" class="game-button">重置</button><button id="turn-music" class="game-button">音乐</button></div>
                     </div>
                     <div id="op-cont">
                         <div id="state-selector-cont"><div class="grid-title">—— 物体设置 ——</div></div>
@@ -1761,6 +1799,9 @@
             ground_layer.draw_all($layer_cont);
             let ikk = -1;
             $('body').append('<input type="text" id="spawn">');
+            if (!global_debug){
+                $('#spawn').hide();
+            }
             $('#advance').on('click', (e)=>{
                 ikk = setInterval(()=>{
                     $("#time").text(ground_layer.time);
@@ -2077,9 +2118,9 @@
         $('#clear-save').on('click', (e)=>{
             try{
                 localStorage.removeItem('ponylover_save');
-                show_prompt('清除成功');
+                show_prompt('重置成功，请刷新');
             } catch (e){
-                show_prompt(`清除失败，${e}`);
+                show_prompt(`重置失败，${e}`);
             }
         });
 
@@ -2129,6 +2170,26 @@
             }
             if (e.key === 'k'){
                 $('#op-cont .mouseclick-cont .cell-wrapper')[3].click();
+            }
+        });
+
+        let has_music = false;
+        $('body').on('click', e=>{
+            if (!has_music){
+                startMusic();
+                has_music = true;
+            }
+        });
+
+        $('#turn-music').on('click', e=>{
+            if (window.bgm){
+                if (!window.bgm.paused){
+                    window.bgm.pause();
+                    show_prompt('已关闭');
+                } else {
+                    window.bgm.play();
+                    show_prompt('已开启');
+                }
             }
         });
 
@@ -2187,6 +2248,9 @@
                     - [x] 扩大物品栏面积
                     - [x]键盘快捷键
                     - [x]保存读取
+                    - 音乐
+                        - https://sb.bitsnbites.eu/?data=U0JveA4C7dxPSsNAFMfxXyYpRRF1K7jIDbpR3CgeQQTX0gMouHAjLgyilpZQ-8c_RfAabjyUR6jvtamWohsX0uj3M7y-yUwDM8lyeHlZl1aUJvEwkzy0rZM1jYTluqreiWY0xvPqFrld5FaRm0XOi9wp8vXM_-9n8mQcAAAAAAAAAAAA-E1hN1O8mS1I1crGZGwopbVYikIUYmuJNe8PbPLcom9xavGgWw3U1ZP1H0uwWT_s84M5P8w7HuWWmvbr--mUYP3PFpmFv4ezEj7_TFe60eXo-Zdx_QAAAAAAAAAA4C_Kx7GfLNa2rPtaUfTWUHpUWU182ivKgpE8PqvAvsvzrD0VX10DAAAAAAAAAADgfxl_hjGXLkKo7dhAPY7iwz2lB2EpUWzNRNa8xMwrs_pTN_s52-SgqQyVWW31dDdVw5TbqnsfH4Ocf7Pr7du17wkAAAAAAAAAAAA_8w4
+                    - 剧情
 
                 DLC或更新：
                 - 钻头效应变化
