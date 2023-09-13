@@ -217,7 +217,7 @@
                     <div id="handinfo-cont">
                         <div id="hand-cont"><div class="grid-title">—— 物品栏 ——</div></div>
                         <div id="info-cont"></div>
-                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button><!--button id="map-big-small" class="game-button">切换大小</button--></div>
+                        <div id="control-cont"><button id="flip-yard" class="game-button">切换层</button>　　<button id="save" class="game-button">保存</button><button id="clear-save" class="game-button">重置</button></div>
                     </div>
                     <div id="op-cont">
                         <div id="state-selector-cont"><div class="grid-title">—— 物体设置 ——</div></div>
@@ -266,7 +266,7 @@
 
             </script>
         </div>
-        <div>
+        <div id="time-control-cont">
             <button id="advance">advance</button>
             <button id="stop">stop</button>
             <span id="time">0</span>
@@ -274,8 +274,12 @@
         <script>
             'use strict'
 
-            let global_debug = true;
+            let global_debug = false;
             let debug_tooltip = global_debug;
+
+            if (!global_debug){
+                $('#time-control-cont').hide();
+            }
 
             const cardinal = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 
@@ -1137,6 +1141,13 @@
                 })()],
             ]);
 
+            for (let [k, v] of item_table){
+                v.lookup_id = k;
+            }
+            for (let [k, v] of entity_table){
+                v.lookup_id = k;
+            }
+
             class YardSubLayer{
                 constructor(layer, init_val){
                     this.layer = layer;
@@ -1862,7 +1873,7 @@
                 let f = ()=>{
                     yard_offset_x += $(e.target).data('x');
                     yard_offset_y += $(e.target).data('y');
-                    restrict_yard_offset()
+                    restrict_yard_offset();
                     move_yard_update_tiles();
                     move_yard_timeout_id = setTimeout(f, 100);
                 };
@@ -1946,6 +1957,21 @@
             let car_x = 0;
             let car_y = 0;
             let car_speed = 0.3;
+
+            function random_generate_coin(){
+                let rx = Math.floor(Math.random() * (52)+0);
+                let ry = Math.floor(Math.random() * (26-24)+24);
+                if (
+                    ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
+                ){
+                    // 设置钱
+                    ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('coin'), null);
+                }
+            }
+            // 初始先生成一些钱
+            for (let i=0; i<20; i++){
+                random_generate_coin();
+            }
             
             let orig_tick_all = ground_layer.tick_all;
             ground_layer.tick_all = function() {
@@ -1962,15 +1988,9 @@
                     }
                 }
                 // 人行道产生钱币
+                
                 if (Math.random() < 0.001){
-                    let rx = Math.floor(Math.random() * (52)+0);
-                    let ry = Math.floor(Math.random() * (26-24)+24);
-                    if (
-                        ground_layer.next_item_sublayer.get_inst(rx, ry).type === item_table.get('empty')
-                    ){
-                        // 设置钱
-                        ground_layer.next_item_sublayer.swap(rx, ry, item_table.get('coin'), null);
-                    }
+                    random_generate_coin();
                 }
                 
                 if (car_x > 52){
@@ -2000,6 +2020,117 @@
                     }
                 }
             }
+        
+        function get_save(){
+            let save_data = {};
+            save_data.layer = [];
+            for (let layer of [ground_layer, underground_layer, hand_layer]){
+                save_data.layer.push(layer.next_item_sublayer.type.map(it => it.lookup_id));
+                save_data.layer.push(Object.fromEntries(layer.next_item_sublayer.state));
+                save_data.layer.push(layer.next_entity_sublayer.type.map(it => it.lookup_id));
+                save_data.layer.push(Object.fromEntries(layer.next_entity_sublayer.state));
+            }
+            save_data.time = ground_layer.time;
+            save_data.view = [yard_offset_x, yard_offset_y];
+            save_data.car = {
+                car_present: car_present,
+                car_speed: car_speed,
+                car_x: car_x,
+                car_y: car_y
+            };
+            return save_data;
+        }
+
+        function set_save(save_data){
+            let c = 0;
+            for (let layer of [ground_layer, underground_layer, hand_layer]){
+                layer.next_item_sublayer.type = save_data.layer[c].map(it => item_table.get(it));
+                c++;
+                layer.next_item_sublayer.state = new Map(Object.entries(save_data.layer[c]).map(p => [parseInt(p[0]), p[1]]));
+                c++;
+                layer.next_entity_sublayer.type = save_data.layer[c].map(it => entity_table.get(it));
+                c++;
+                layer.next_entity_sublayer.state = new Map(Object.entries(save_data.layer[c]).map(p => [parseInt(p[0]), p[1]]));
+                c++;
+            }
+            ground_layer.time = underground_layer.time = save_data.time;
+            [yard_offset_x, yard_offset_y] = save_data.view;
+            ({
+                car_present,
+                car_speed,
+                car_x,
+                car_y
+            } = save_data.car);
+            move_yard_update_tiles();
+            redraw_hand_and_selector();
+        }
+
+        $('#save').on('click', (e)=>{
+            try{
+                localStorage.setItem('ponylover_save', JSON.stringify(get_save()));
+                show_prompt('保存成功');
+            } catch (e){
+                show_prompt(`保存失败，${e}`);
+            }
+        });
+
+        $('#clear-save').on('click', (e)=>{
+            try{
+                localStorage.removeItem('ponylover_save');
+                show_prompt('清除成功');
+            } catch (e){
+                show_prompt(`清除失败，${e}`);
+            }
+        });
+
+        yard_offset_x = 30;
+        yard_offset_y = 10;
+        move_yard_update_tiles();
+
+        let k;
+        if (k = JSON.parse(localStorage.getItem('ponylover_save'))){
+            set_save(k);
+        }
+
+        $('body').on('keydown', (e) => {
+            if (e.key === 'a' || e.key === 'ArrowLeft'){
+                yard_offset_x -= 3;
+                restrict_yard_offset();
+                move_yard_update_tiles();
+            }
+            if (e.key === 'd' || e.key === 'ArrowRight'){
+                yard_offset_x += 3;
+                restrict_yard_offset();
+                move_yard_update_tiles();
+            }
+            if (e.key === 'w' || e.key === 'ArrowUp'){
+                yard_offset_y -= 3;
+                restrict_yard_offset();
+                move_yard_update_tiles();
+            }
+            if (e.key === 's' || e.key === 'ArrowDown'){
+                yard_offset_y += 3;
+                restrict_yard_offset();
+                move_yard_update_tiles();
+            }
+            if (e.key === '1'){$('#hand-cont .mouseclick-cont .cell-wrapper')[1].click();}
+            if (e.key === '2'){$('#hand-cont .mouseclick-cont .cell-wrapper')[2].click();}
+            if (e.key === '3'){$('#hand-cont .mouseclick-cont .cell-wrapper')[3].click();}
+            if (e.key === '4'){$('#hand-cont .mouseclick-cont .cell-wrapper')[4].click();}
+            if (e.key === '5'){$('#hand-cont .mouseclick-cont .cell-wrapper')[5].click();}
+            if (e.key === 'i'){
+                $('#op-cont .mouseclick-cont .cell-wrapper')[0].click();
+            }
+            if (e.key === 'j'){
+                $('#op-cont .mouseclick-cont .cell-wrapper')[1].click();
+            }
+            if (e.key === 'l'){
+                $('#op-cont .mouseclick-cont .cell-wrapper')[2].click();
+            }
+            if (e.key === 'k'){
+                $('#op-cont .mouseclick-cont .cell-wrapper')[3].click();
+            }
+        });
 
         </script>
         <script>
@@ -2054,6 +2185,8 @@
                     - [x]移动视角
                     - 放大缩小画面
                     - [x] 扩大物品栏面积
+                    - [x]键盘快捷键
+                    - [x]保存读取
 
                 DLC或更新：
                 - 钻头效应变化
