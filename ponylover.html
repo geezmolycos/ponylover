@@ -1,3 +1,4 @@
+<!doctype html>
 <html>
     <head>
         <title>爱我的六色马可以做什么事</title>
@@ -57,6 +58,7 @@
                 position: absolute;
                 left: 0px;
                 top: 0px;
+                line-height: 0;
             }
             .cell-wrapper{
                 display: inline-block;
@@ -89,7 +91,7 @@
 
             
 .hue-rotate-animated {
-  animation: filter-animation 2s infinite;
+  animation: filter-animation 2s infinite, spin 4s linear;
 }
 
 @keyframes filter-animation {
@@ -107,6 +109,13 @@
     filter: hue-rotate(0deg);
     background-color: #1e5799;
   }
+}
+
+@keyframes spin { 
+    100% { 
+        -webkit-transform: rotate(1080deg) scale(0.1); 
+        transform:rotate(1080deg) scale(0.1); 
+    } 
 }
         </style>
         <style>
@@ -296,6 +305,14 @@
                 margin-right: 5px;
             }
 
+            table {
+                margin: auto;
+            }
+
+            span.space {
+                margin-right: 2em;
+            }
+
         </style>
     </head>
     <body>
@@ -334,6 +351,26 @@
                 </div>
                 <div id="footer-cont"></div>
                 <div ><div id="dialog-image-cont"></div><div id="dialog-cont"><br><br><br><br><br><br><br><br><br><br><br><br></div><button id="skip-dialog" class="game-button">跳过</button></div>
+            </div>
+            <div id="complete-cont" style="display: none;">
+                <h1>你穿过了虫洞，来到了一片光芒之中。</h1>
+                <h1>你如愿以偿到达了六色马的世界！</h1>
+                <div>
+                    <div id="complete-pony-cont" style="display: inline-block">
+                        你的六色马：
+                        <div id="six-color-text"></div>
+                        <div id="six-color-color" style="width: 32px; height: 32px;"></div>
+                        <img id="six-color" src="" alt="">
+                    </div>
+                    <div style="display: inline-block">
+                        物品生产数量：
+                        <div id="stats-cont" style="text-align: center;">
+                        </div>
+                        建筑合成数量：
+                        <div id="entity-stats-cont" style="text-align: center;">
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="prompt-container"></div>
             <style>
@@ -2540,14 +2577,95 @@
             }
         }
 
-        function big_wormhole_crafted(){
+        function make_stats(){
+            let h = "<table><tbody>";
+            let i = 0;
+            for (let [type_id, type] of item_table){
+                if (i % 5 == 0){
+                    h += '<tr>';
+                }
+                h += '<td>';
+                let asd =item_table.get(type_id).draw({});
+                if (asd){
+                    let k = $('<div>').append(asd);
+                    let type_icon = k.html();
+                    h += type_icon;
+                }
+                h += '</td>';
+                h += '<td>' + (total_produced.get(type_id) || 0 )+ '<span class="space"></span></td>';
+                if (h % 5 == 4){
+                    h += '</tr>';
+                }
+                i++;
+            }
+            h += '</tbody></table>';
+            return h;
+        }
+
+        function make_entity_stats(){
+            let h = "<table><tbody>";
+            let i = 0;
+            for (let [type_id, type] of entity_table){
+                if (i % 5 == 0){
+                    h += '<tr>';
+                }
+                h += '<td>';
+                let asd =entity_table.get(type_id).draw({type: type, state: get_default_state(type)});
+                if (asd){
+                    let k = $('<div>').append(asd.css('width', '32px').css('height', '32px'));
+                    let type_icon = k.html();
+                    h += type_icon;
+                } else {
+                    h += type_id;
+                }
+                h += '</td>';
+                h += '<td>' + (total_crafted.get(type_id) || 0 )+ '<span class="space"></span></td>';
+                if (h % 5 == 4){
+                    h += '</tr>';
+                }
+                i++;
+            }
+            h += '</tbody></table>';
+            return h;
+        }
+
+        function big_wormhole_crafted(quick=false){
             // $('body').css('background', 'radial-gradient(ellipse at center,  #1e5799 0%,#7db9e8 100%)');
             $('body').addClass('hue-rotate-animated');
-            window.bgm.pause();
+            if (window.bgm){
+                window.bgm.pause();
+            }
             clearInterval(ikk);
             setTimeout(() => {
-                
-            }, 5000);
+                $('#game-cont').hide();
+                setTimeout(() => {
+                    $('body').removeClass('hue-rotate-animated');
+                    $('#complete-cont').show();
+                    $('#stats-cont').html(make_stats());
+                    $('#entity-stats-cont').html(make_entity_stats());
+                    let wormhole_count = total_produced.get('wormhole') || 0;
+                    let antimatter_count = total_produced.get('anti_iron_ingot') || 0;
+                    let decision = wormhole_count * 5 + antimatter_count;
+                    $('#six-color').attr('src', './pony'+decision+'.png');
+                    $('#six-color-color').css('background-color', [
+                        '#CC9CDF',
+                        '#9BDBF5',
+                        '#FAF5AB',
+                        '#F5B7D0',
+                        '#FABA62',
+                        '#EAEEF0'
+                    ][decision]);
+                    $('#six-color-text').text([
+                        'Purple Smart',
+                        'Blue Fast',
+                        'Flustershy',
+                        'Ponka Pone',
+                        'Applesack',
+                        'Charity'
+                    ][decision]);
+
+                }, quick ? 0 : 3000);
+            }, quick ? 0 : 3000);
         }
 
         </script>
